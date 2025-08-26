@@ -1,5 +1,5 @@
 const Donation = require("../models/Donation");
-const User = require("../models/User");
+const User = require("../models/user");
 
 // ===== Volunteer Accept Donation =====
 exports.acceptDonation = async (req, res) => {
