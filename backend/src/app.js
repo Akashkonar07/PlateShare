@@ -4,15 +4,6 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
 
-// ===== Route Imports =====
-const authRoutes = require("./routes/auth");
-const donationRoutes = require("./routes/donations");
-const volunteerRoutes = require("./routes/volunteers");
-const ngoRoutes = require("./routes/ngos");
-const reportRoutes = require("./routes/reports");
-const mlRoutes = require("./routes/ml");
-const notificationRoutes = require("./routes/notifications");
-
 // ===== Middleware Imports =====
 const { errorHandler } = require("./middleware/errorHandler");
 
@@ -20,7 +11,7 @@ const app = express();
 
 // ===== Middleware =====
 app.use(express.json());
-app.use(cors()); // restrict in production
+app.use(cors());
 
 // ===== Logging middleware (dev) =====
 app.use((req, res, next) => {
@@ -33,14 +24,37 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // ===== MongoDB Connection =====
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB error:", err));
+mongoose.connect(process.env.MONGO_URI) // modern default options
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => console.error("❌ MongoDB error:", err));
 
-// ===== Routes =====
+// ===== Route Imports =====
+const authRoutes = require("./routes/auth");
+const donationRoutes = require("./routes/donations");
+const volunteerRoutes = require("./routes/volunteers");
+const ngoRoutes = require("./routes/ngos");
+const reportRoutes = require("./routes/reports");
+const mlRoutes = require("./routes/ml");
+const notificationRoutes = require("./routes/notifications");
+
+// ===== Debug: Ensure routers are valid =====
+[
+  { name: "authRoutes", router: authRoutes },
+  { name: "donationRoutes", router: donationRoutes },
+  { name: "volunteerRoutes", router: volunteerRoutes },
+  { name: "ngoRoutes", router: ngoRoutes },
+  { name: "reportRoutes", router: reportRoutes },
+  { name: "mlRoutes", router: mlRoutes },
+  { name: "notificationRoutes", router: notificationRoutes }
+].forEach(({ name, router }) => {
+  if (!router || typeof router !== "function") {
+    console.error(`❌ ${name} is invalid:`, router);
+  } else {
+    console.log(`✅ ${name} is valid`);
+  }
+});
+
+// ===== API Routes =====
 app.use("/api/auth", authRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/volunteers", volunteerRoutes);
