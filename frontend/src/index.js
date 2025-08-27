@@ -1,27 +1,15 @@
-import { Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import Navbar from "./components/Navbar";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import DonorDashboard from "./pages/DonorDashboard";
-import VolunteerDashboard from "./pages/VolunteerDashboard";
-import NGODashboard from "./pages/NGODashboard";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
 
-function App() {
-  return (
-    <AuthProvider>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/donor" element={<DonorDashboard />} />
-        <Route path="/volunteer" element={<VolunteerDashboard />} />
-        <Route path="/ngo" element={<NGODashboard />} />
-      </Routes>
-    </AuthProvider>
-  );
-}
+console.log("✅ Index.js loaded"); // Debug log
 
-export default App;
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);

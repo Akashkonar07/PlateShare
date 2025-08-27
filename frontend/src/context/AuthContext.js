@@ -9,7 +9,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
-      getUserProfile(token).then(setUser).catch(() => localStorage.removeItem("token"));
+      getUserProfile(token)
+        .then(setUser)
+        .catch(() => localStorage.removeItem("token"));
     }
   }, []);
 

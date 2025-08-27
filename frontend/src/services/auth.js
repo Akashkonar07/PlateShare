@@ -1,18 +1,15 @@
-import api from './api';
+import axios from "axios";
 
-export const loginUser = async (credentials) => {
-  const { data } = await api.post('/auth/login', credentials);
-  return data; // should include JWT token and user info
+const API_URL = "http://localhost:5000/api"; // make sure this matches backend port
+
+export const signupUser = async (userData) => {
+  return axios.post(`${API_URL}/register`, userData); // changed from /signup to /register
 };
 
-export const signupUser = async (userInfo) => {
-  const { data } = await api.post('/auth/signup', userInfo);
-  return data;
+export const loginUser = async (userData) => {
+  return axios.post(`${API_URL}/login`, userData);
 };
 
 export const getUserProfile = async (token) => {
-  const { data } = await api.get('/auth/profile', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return data;
+  return axios.get(`${API_URL}/profile`, { headers: { Authorization: `Bearer ${token}` } });
 };

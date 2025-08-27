@@ -1,32 +1,57 @@
 import { useState } from "react";
-import { loginUser } from "../services/auth";
 import { useNavigate } from "react-router-dom";
-import useAuth from "../hooks/useAuth";
+import { loginUser } from "../services/auth";
+import { useAuth } from "../hooks/useAuth"; // named import
 
 const Login = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const { setUser } = useAuth();
   const navigate = useNavigate();
+
+  const [form, setForm] = useState({ email: "", password: "" });
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const data = await loginUser({ email, password });
+      const data = await loginUser(form);
       localStorage.setItem("token", data.token);
       setUser(data.user);
-      navigate(`/${data.user.role}`);
+      navigate("/"); // redirect to home or dashboard
     } catch (err) {
-      alert("Login failed");
+      console.error(err);
+      alert("Login failed. Check your credentials.");
     }
   };
 
   return (
-    <div className="flex justify-center mt-20">
-      <form onSubmit={handleSubmit} className="flex flex-col space-y-4 w-80">
-        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="p-2 border rounded"/>
-        <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} className="p-2 border rounded"/>
-        <button type="submit" className="bg-green-500 text-white py-2 rounded">Login</button>
+    <div className="max-w-md mx-auto mt-20 p-4 bg-white shadow rounded">
+      <h2 className="text-2xl font-bold mb-4">Login</h2>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <input
+          type="email"
+          name="email"
+          placeholder="Email"
+          value={form.email}
+          onChange={handleChange}
+          required
+          className="w-full p-2 border rounded"
+        />
+        <input
+          type="password"
+          name="password"
+          placeholder="Password"
+          value={form.password}
+          onChange={handleChange}
+          required
+          className="w-full p-2 border rounded"
+        />
+        <button
+          type="submit"
+          className="w-full bg-green-600 text-white p-2 rounded"
+        >
+          Login
+        </button>
       </form>
     </div>
   );

@@ -1,60 +1,24 @@
-import { useState, useEffect } from "react";
-import useAuth from "../hooks/useAuth";
-import { fetchDonations, updateDonationStatus } from "../services/donation";
-import DonationCard from "../components/DonationCard";
-import MapView from "../components/MapView";
+import { useAuth } from "../hooks/useAuth";
 
 const VolunteerDashboard = () => {
-  const { user } = useAuth();
-  const token = localStorage.getItem("token");
-  const [donations, setDonations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDonation, setSelectedDonation] = useState(null);
-
-  // Fetch donations every 10 seconds for live updates
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchDonations(token);
-        // Filter small/medium donations that are pending
-        setDonations(data.filter(d => d.status === "pending" && d.size !== "large"));
-      } catch (err) {
-        console.error(err);
-      }
-      setLoading(false);
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // 10 seconds
-    return () => clearInterval(interval);
-  }, [token]);
-
-  const handleAction = async (donationId, action) => {
-    try {
-      await updateDonationStatus(donationId, action, token);
-      setDonations(prev => prev.map(d => d._id === donationId ? { ...d, status: action } : d));
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const { user, logout } = useAuth();
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Volunteer Dashboard</h1>
-      {loading && <p>Loading donations...</p>}
-      {donations.length === 0 && !loading && <p>No nearby donations at the moment.</p>}
-      <div className="grid md:grid-cols-2 gap-4">
-        {donations.map(d => (
-          <DonationCard key={d._id} donation={d} onAction={handleAction} />
-        ))}
-      </div>
-
-      {selectedDonation && (
-        <div className="mt-6">
-          <h2 className="text-xl font-semibold mb-2">Donation Location</h2>
-          <MapView center={{ lat: selectedDonation.lat, lng: selectedDonation.lng }} markers={[selectedDonation]} />
+    <div className="max-w-3xl mx-auto mt-20 p-4 bg-white shadow rounded">
+      <h2 className="text-3xl font-bold mb-4">Volunteer Dashboard</h2>
+      {user ? (
+        <div>
+          <p>Welcome, {user.name || "Volunteer"}!</p>
+          <p>Your role: {user.role}</p>
+          <button
+            onClick={logout}
+            className="mt-4 bg-red-500 text-white px-4 py-2 rounded"
+          >
+            Logout
+          </button>
         </div>
+      ) : (
+        <p>Please login to access your dashboard.</p>
       )}
     </div>
   );

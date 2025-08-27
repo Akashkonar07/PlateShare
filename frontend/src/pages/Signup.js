@@ -1,72 +1,104 @@
 import { useState } from "react";
-import { signupUser } from "../services/auth";
 import { useNavigate } from "react-router-dom";
-import useAuth from "../hooks/useAuth";
+import { signupUser, loginUser } from "../services/auth";
+import { useAuth } from "../hooks/useAuth"; // make sure useAuth is exported correctly
 
 const Signup = () => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("donor"); // default role
-  const { setUser } = useAuth();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "donor", // default role
+  });
+  const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { setUser } = useAuth(); // get setUser from AuthContext
+
+  const handleChange = (e) => {
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !email || !password) return alert("Please fill all fields");
+    setError("");
     try {
-      const data = await signupUser({ name, email, password, role });
-      // save JWT token
-      localStorage.setItem("token", data.token);
-      setUser(data.user);
-      navigate(`/${data.user.role}`); // redirect based on role
+      // 1️⃣ Signup request
+      await signupUser(formData); // hits http://localhost:5000/api/register
+
+      // 2️⃣ Login immediately after signup
+      const response = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      // 3️⃣ Save token and update context
+      localStorage.setItem("token", response.data.token);
+      setUser(response.data.user);
+
+      // 4️⃣ Navigate to role-based dashboard
+      if (response.data.user.role === "donor") navigate("/donor");
+      else if (response.data.user.role === "volunteer") navigate("/volunteer");
+      else if (response.data.user.role === "ngo") navigate("/ngo");
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Signup failed");
+      if (err.response && err.response.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     }
   };
 
   return (
-    <div className="flex justify-center mt-20">
-      <form onSubmit={handleSubmit} className="flex flex-col space-y-4 w-80 p-6 border rounded shadow-lg bg-white">
-        <h1 className="text-2xl font-bold text-center mb-4">Sign Up</h1>
-
+    <div className="max-w-md mx-auto mt-20 p-6 border rounded shadow">
+      <h1 className="text-2xl font-bold mb-4">Signup</h1>
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="text"
-          placeholder="Full Name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          className="p-2 border rounded"
+          name="name"
+          placeholder="Name"
+          value={formData.name}
+          onChange={handleChange}
+          required
+          className="w-full p-2 border rounded"
+          autoComplete="name"
         />
-
         <input
           type="email"
+          name="email"
           placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="p-2 border rounded"
+          value={formData.email}
+          onChange={handleChange}
+          required
+          className="w-full p-2 border rounded"
+          autoComplete="email"
         />
-
         <input
           type="password"
+          name="password"
           placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="p-2 border rounded"
+          value={formData.password}
+          onChange={handleChange}
+          required
+          className="w-full p-2 border rounded"
+          autoComplete="new-password"
         />
-
         <select
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          className="p-2 border rounded"
+          name="role"
+          value={formData.role}
+          onChange={handleChange}
+          className="w-full p-2 border rounded"
         >
           <option value="donor">Donor</option>
           <option value="volunteer">Volunteer</option>
           <option value="ngo">NGO</option>
         </select>
-
-        <button type="submit" className="bg-green-500 text-white py-2 rounded hover:bg-green-600 transition">
-          Sign Up
+        <button
+          type="submit"
+          className="w-full bg-green-600 text-white p-2 rounded"
+        >
+          Signup
         </button>
       </form>
     </div>
