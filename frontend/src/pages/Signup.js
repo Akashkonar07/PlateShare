@@ -30,15 +30,22 @@ const Signup = () => {
       role: formData.role.charAt(0).toUpperCase() + formData.role.slice(1),
     };
 
+    console.log("Signup payload:", payload);
+
     try {
       const signupResponse = await signupUser(payload);
+      console.log("Signup response:", signupResponse.data);
       
       // Store token and user from signup response
       localStorage.setItem("token", signupResponse.data.token);
       setUser(signupResponse.data.user);
-      navigate(`/${signupResponse.data.user.role.toLowerCase()}`);
+      
+      const redirectPath = `/${signupResponse.data.user.role.toLowerCase()}`;
+      console.log("Redirecting to:", redirectPath);
+      navigate(redirectPath);
     } catch (err) {
       console.error("Signup Error:", err);
+      console.error("Error response:", err.response?.data);
       setError(err.response?.data?.message || "Signup failed. Try again.");
     } finally {
       setLoading(false);

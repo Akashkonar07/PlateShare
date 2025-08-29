@@ -7,6 +7,13 @@ export const createDonation = async (donationData, token) => {
   return data;
 };
 
+export const getMyDonations = async (token) => {
+  const { data } = await api.get('/donations/me', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return data;
+};
+
 export const fetchDonations = async (token) => {
   const { data } = await api.get('/donations', {
     headers: { Authorization: `Bearer ${token}` }
@@ -16,6 +23,13 @@ export const fetchDonations = async (token) => {
 
 export const updateDonationStatus = async (donationId, status, token) => {
   const { data } = await api.patch(`/donations/${donationId}`, { status }, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return data;
+};
+
+export const deleteDonation = async (donationId, token) => {
+  const { data } = await api.delete(`/donations/${donationId}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   return data;

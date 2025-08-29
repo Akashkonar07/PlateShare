@@ -20,7 +20,14 @@ router.post("/register", async (req, res) => {
 
     // ensure role is capitalized and valid
     const validRoles = ["Donor", "Volunteer", "NGO", "Admin"];
-    const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+    let formattedRole;
+    
+    if (role.toLowerCase() === "ngo") {
+      formattedRole = "NGO";
+    } else {
+      formattedRole = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+    }
+    
     if (!validRoles.includes(formattedRole)) {
       return res.status(400).json({ message: "Invalid role" });
     }

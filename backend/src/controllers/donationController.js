@@ -1,33 +1,67 @@
 const Donation = require("../models/Donation");
 const User = require("../models/user");
+const cloudinary = require("../config/cloudinary");
 
 // ===== Donor Creates Donation =====
 exports.createDonation = async (req, res) => {
   try {
-    const { title, description, category } = req.body;
-    const photo = req.file ? req.file.buffer : null;
+    const { foodType, quantity, bestBefore, latitude, longitude, description } = req.body;
+    let photoUrl = null;
+
+    // Upload photo to cloudinary if provided
+    if (req.file) {
+      const result = await cloudinary.uploader.upload_stream(
+        { resource_type: "image", folder: "plateshare/donations" },
+        (error, result) => {
+          if (error) throw error;
+          return result;
+        }
+      );
+      
+      // Convert buffer to base64 and upload
+      const base64 = req.file.buffer.toString('base64');
+      const dataURI = `data:${req.file.mimetype};base64,${base64}`;
+      const uploadResult = await cloudinary.uploader.upload(dataURI, {
+        folder: "plateshare/donations"
+      });
+      photoUrl = uploadResult.secure_url;
+    }
 
     const donation = new Donation({
-      title,
+      donor: req.user._id,
+      foodType,
+      quantity: parseInt(quantity),
+      bestBefore: new Date(bestBefore),
+      photoUrl,
+      location: {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude)
+      },
       description,
-      category,
-      photo,
-      createdBy: req.user._id,
-      status: "Pending", // or "Assigned" depending on your logic
+      status: "Pending"
     });
 
     await donation.save();
-    res.status(201).json({ message: "Donation created successfully", donation });
+    
+    // Populate donor info for response
+    await donation.populate('donor', 'name email');
+    
+    res.status(201).json({ 
+      message: "Donation created successfully", 
+      donation 
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
 // ===== Donor Views Their Donations =====
 exports.getMyDonations = async (req, res) => {
   try {
-    const donations = await Donation.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
+    const donations = await Donation.find({ donor: req.user._id })
+      .populate('assignedTo', 'name email role')
+      .sort({ createdAt: -1 });
     res.json({ donations });
   } catch (err) {
     console.error(err);

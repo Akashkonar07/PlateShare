@@ -1,24 +1,40 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 const useGeoLocation = () => {
-  const [location, setLocation] = useState({ lat: null, lng: null, error: null });
+  const [location, setLocation] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setLocation(prev => ({ ...prev, error: "Geolocation not supported" }));
+      setError("Geolocation not supported");
       return;
     }
 
-    const watcher = navigator.geolocation.watchPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, error: null }),
-      (err) => setLocation(prev => ({ ...prev, error: err.message })),
-      { enableHighAccuracy: true }
+    setLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+      { 
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
     );
+  };
 
-    return () => navigator.geolocation.clearWatch(watcher);
-  }, []);
-
-  return location;
+  return { location, error, loading, getCurrentLocation };
 };
 
 export default useGeoLocation;

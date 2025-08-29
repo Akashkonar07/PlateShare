@@ -5,6 +5,7 @@ const donationSchema = new mongoose.Schema({
   foodType: { type: String, required: true },
   quantity: { type: Number, required: true },
   bestBefore: { type: Date, required: true },
+  description: { type: String },  // additional details about the food
   photoUrl: { type: String },  // store Cloudinary or local file URL
   location: {
     latitude: { type: Number, required: true },
