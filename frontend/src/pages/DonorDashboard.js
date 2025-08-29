@@ -14,6 +14,7 @@ const DonorDashboard = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [isCameraInitialized, setIsCameraInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
     foodType: "",
@@ -44,11 +45,14 @@ const DonorDashboard = () => {
   const fetchMyDonations = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const response = await getMyDonations(token);
+      const response = await getMyDonations();
       setDonations(response.donations || []);
     } catch (error) {
       console.error("Error fetching donations:", error);
+      if (error.response?.status === 401) {
+        // Handle unauthorized
+        logout();
+      }
     } finally {
       setLoading(false);
     }
@@ -61,19 +65,44 @@ const DonorDashboard = () => {
     });
   };
 
-  const handlePhotoCapture = (blob) => {
-    setCapturedPhoto(blob);
-    const previewUrl = URL.createObjectURL(blob);
-    setPhotoPreview(previewUrl);
-    setShowCamera(false);
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const handlePhotoCapture = (file) => {
+    if (!file) {
+      setShowCamera(false);
+      return;
+    }
+    
+    try {
       setCapturedPhoto(file);
       const previewUrl = URL.createObjectURL(file);
       setPhotoPreview(previewUrl);
+      setShowCamera(false);
+    } catch (error) {
+      console.error('Error handling captured photo:', error);
+      alert('Failed to process the captured image. Please try again.');
+      setPhotoPreview(null);
+      setCapturedPhoto(null);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (JPEG, PNG, etc.)');
+      return;
+    }
+    
+    try {
+      setCapturedPhoto(file);
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+    } catch (error) {
+      console.error('Error creating file preview:', error);
+      alert('Failed to process the uploaded image. Please try another file.');
+      setPhotoPreview(null);
+      setCapturedPhoto(null);
     }
   };
 
@@ -87,21 +116,28 @@ const DonorDashboard = () => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
       
       const formDataToSend = new FormData();
-      formDataToSend.append("foodType", formData.foodType);
-      formDataToSend.append("quantity", formData.quantity);
-      formDataToSend.append("bestBefore", formData.bestBefore);
-      formDataToSend.append("description", formData.description);
-      formDataToSend.append("latitude", formData.latitude);
-      formDataToSend.append("longitude", formData.longitude);
       
+      // Append all form fields
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          formDataToSend.append(key, value);
+        }
+      });
+      
+      // Handle photo upload if available
       if (capturedPhoto) {
-        formDataToSend.append("photo", capturedPhoto);
+        // If it's a Blob (from camera), convert to File
+        if (capturedPhoto instanceof Blob) {
+          const file = new File([capturedPhoto], 'donation-photo.jpg', { type: 'image/jpeg' });
+          formDataToSend.append('photo', file);
+        } else if (capturedPhoto instanceof File) {
+          formDataToSend.append('photo', capturedPhoto);
+        }
       }
 
-      await createDonation(formDataToSend, token);
+      const response = await createDonation(formDataToSend);
       
       // Reset form
       setFormData({
@@ -115,11 +151,22 @@ const DonorDashboard = () => {
       setCapturedPhoto(null);
       setPhotoPreview(null);
       
+      // Show success message
       alert("Donation created successfully!");
-      setActiveTab("donations");
+      
+      // Refresh donations list
+      fetchMyDonations();
+      
     } catch (error) {
       console.error("Error creating donation:", error);
-      alert("Error creating donation. Please try again.");
+      
+      if (error.isNetworkError) {
+        alert("Network error: Please check your internet connection and try again.");
+      } else if (error.response?.status === 401) {
+        logout();
+      } else {
+        alert(error.message || "Failed to create donation. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -355,23 +402,13 @@ const DonorDashboard = () => {
                         </button>
                       </div>
                     )}
-
+                    
                     {/* Camera Modal */}
                     {showCamera && (
-                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-6 rounded-lg">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-medium">Capture Food Photo</h3>
-                            <button
-                              onClick={() => setShowCamera(false)}
-                              className="text-gray-500 hover:text-gray-700"
-                            >
-                              ×
-                            </button>
-                          </div>
-                          <PhotoCapture onCapture={handlePhotoCapture} />
-                        </div>
-                      </div>
+                      <PhotoCapture 
+                        onCapture={handlePhotoCapture} 
+                        onClose={() => setShowCamera(false)} 
+                      />
                     )}
                   </div>
                 </div>

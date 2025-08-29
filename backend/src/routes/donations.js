@@ -6,7 +6,20 @@ const multer = require("multer");
 
 // Setup multer for file uploads
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({ 
+  storage,
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept images only
+    if (!file.originalname.match(/\.(jpg|jpeg|png)$/i)) {
+      return cb(new Error('Only image files are allowed!'), false);
+    }
+    cb(null, true);
+  }
+});
 
 // --- Helper function to verify middlewares/controllers ---
 const assertFunction = (fn, name) => {
@@ -73,15 +86,55 @@ router.post(
   "/:donationId/pickup",
   authenticate,
   authorize(["Volunteer", "NGO"]),
+  upload.single('photo'),
   donationController.confirmPickup
 );
 
-// Volunteer/NGO confirms delivery
+// Delivery confirmation (Volunteer marks delivery as complete)
 router.post(
-  "/:donationId/deliver",
+  "/:id/deliver",
+  (req, res, next) => {
+    console.log('Delivery confirmation request received');
+    console.log('Request headers:', req.headers);
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files || 'No files');
+    next();
+  },
   authenticate,
-  authorize(["Volunteer", "NGO"]),
-  donationController.confirmDelivery
+  authorize(["Volunteer"]),
+  upload.single("deliveryPhoto"),
+  (req, res, next) => {
+    console.log('After file upload middleware');
+    console.log('File info:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      buffer: req.file.buffer ? `Buffer of ${req.file.buffer.length} bytes` : 'No buffer'
+    } : 'No file uploaded');
+    next();
+  },
+  async (req, res, next) => {
+    try {
+      await donationController.confirmDelivery(req, res, next);
+    } catch (error) {
+      console.error('Error in delivery confirmation route:', {
+        message: error.message,
+        stack: error.stack,
+        requestBody: req.body,
+        file: req.file ? {
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype
+        } : 'No file'
+      });
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error during delivery confirmation',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred'
+      });
+    }
+  }
 );
 
 // Volunteer/NGO declines a donation

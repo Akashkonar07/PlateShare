@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { fetchDonations, updateDonationStatus } from "../services/donation";
+import { fetchDonations, confirmNGODonation } from "../services/donation";
 
 const NGODashboard = () => {
   const { user, logout } = useAuth();
@@ -77,10 +77,10 @@ const NGODashboard = () => {
     try {
       const token = localStorage.getItem("token");
       
-      // Accept all selected donations
+      // Accept all selected donations as NGO
       await Promise.all(
         selectedDonations.map(donationId => 
-          updateDonationStatus(donationId, "Assigned", token)
+          confirmNGODonation(donationId, token, 'NGO has accepted the assignment')
         )
       );
       

@@ -26,7 +26,8 @@ const donationSchema = new mongoose.Schema({
     },
     timestamp: { type: Date, default: Date.now },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    notes: { type: String }
+    notes: { type: String },
+    photoUrl: { type: String } // Photo URL for verification
   }],
   priority: {
     type: String,
@@ -36,6 +37,22 @@ const donationSchema = new mongoose.Schema({
   estimatedPickupTime: { type: Date },
   actualPickupTime: { type: Date },
   actualDeliveryTime: { type: Date },
+  // Photo verification
+  pickupPhotoUrl: { type: String }, // Photo taken during pickup
+  deliveryPhotoUrl: { type: String }, // Photo taken during delivery
+  // CSR Details
+  csrDetails: {
+    recipientName: { type: String },
+    recipientType: { type: String, enum: ["Individual", "NGO", "Shelter", "Other"] },
+    recipientContact: { type: String },
+    numberOfPeopleServed: { type: Number },
+    notes: { type: String },
+    verifiedByDonor: { 
+      isVerified: { type: Boolean, default: false },
+      verifiedAt: { type: Date },
+      feedback: { type: String }
+    }
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
