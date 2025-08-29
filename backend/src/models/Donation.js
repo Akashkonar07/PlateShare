@@ -13,11 +13,31 @@ const donationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["Pending", "Assigned", "PickedUp", "Delivered", "Rejected"],
+    enum: ["Pending", "Assigned", "PickedUp", "Delivered", "Rejected", "Cancelled"],
     default: "Pending",
   },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // volunteer or NGO
+  assignedAt: { type: Date }, // when the donation was assigned
+  trackingHistory: [{
+    status: {
+      type: String,
+      enum: ["Pending", "Assigned", "PickedUp", "Delivered", "Rejected", "Cancelled"],
+      required: true
+    },
+    timestamp: { type: Date, default: Date.now },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    notes: { type: String }
+  }],
+  priority: {
+    type: String,
+    enum: ["Low", "Medium", "High", "Urgent"],
+    default: "Medium"
+  },
+  estimatedPickupTime: { type: Date },
+  actualPickupTime: { type: Date },
+  actualDeliveryTime: { type: Date },
   createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model("Donation", donationSchema);

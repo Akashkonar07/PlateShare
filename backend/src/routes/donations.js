@@ -52,12 +52,28 @@ router.get(
   donationController.getAssignedDonations
 );
 
-// Volunteer accepts a donation
+// Get all donations (for volunteers/NGOs to browse)
+router.get(
+  "/",
+  authenticate,
+  authorize(["Volunteer", "NGO", "Admin"]),
+  donationController.getAllDonations
+);
+
+// Volunteer/NGO accepts a donation
 router.post(
   "/:donationId/accept",
   authenticate,
-  authorize(["Volunteer"]),
+  authorize(["Volunteer", "NGO"]),
   donationController.acceptDonation
+);
+
+// Volunteer/NGO confirms pickup
+router.post(
+  "/:donationId/pickup",
+  authenticate,
+  authorize(["Volunteer", "NGO"]),
+  donationController.confirmPickup
 );
 
 // Volunteer/NGO confirms delivery
@@ -74,6 +90,22 @@ router.post(
   authenticate,
   authorize(["Volunteer", "NGO"]),
   donationController.declineDonation
+);
+
+// Get donation tracking history
+router.get(
+  "/:donationId/tracking",
+  authenticate,
+  authorize(["Donor", "Volunteer", "NGO", "Admin"]),
+  donationController.getDonationTracking
+);
+
+// Update donation status (general endpoint)
+router.patch(
+  "/:donationId/status",
+  authenticate,
+  authorize(["Volunteer", "NGO", "Admin"]),
+  donationController.updateDonationStatus
 );
 
 module.exports = router;
