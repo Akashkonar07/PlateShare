@@ -6,25 +6,29 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   role: {
     type: String,
-    enum: ["Donor", "Volunteer", "NGO", "Admin"],
+    enum: ["Donor", "Volunteer", "NGO", "Admin"], // all valid roles
     default: "Donor",
   },
   password: { type: String, required: true }, // hashed password
   isVerified: { type: Boolean, default: false }, // for email/OTP verification
   points: { type: Number, default: 0 },
-  badges: [String],
+  badges: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now },
 });
 
-// Hash password before saving
-userSchema.pre("save", async function(next) {
+// 🔒 Hash password before saving
+userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+  try {
+    this.password = await bcrypt.hash(this.password, 10);
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
-// Password validation method
-userSchema.methods.comparePassword = function(password) {
+// ✅ Compare password method
+userSchema.methods.comparePassword = async function (password) {
   return bcrypt.compare(password, this.password);
 };
 

@@ -10,8 +10,11 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem("token");
     if (token) {
       getUserProfile(token)
-        .then(setUser)
-        .catch(() => localStorage.removeItem("token"));
+        .then((response) => setUser(response.data))
+        .catch(() => {
+          localStorage.removeItem("token");
+          setUser(null);
+        });
     }
   }, []);
 

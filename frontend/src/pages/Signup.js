@@ -1,88 +1,86 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { signupUser, loginUser } from "../services/auth";
-import { useAuth } from "../hooks/useAuth"; // make sure useAuth is exported correctly
+import { signupUser } from "../services/auth";
+import { useAuth } from "../hooks/useAuth";
 
 const Signup = () => {
+  const { setUser } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    role: "donor", // default role
+    role: "donor",
   });
   const [error, setError] = useState("");
-  const navigate = useNavigate();
-  const { setUser } = useAuth(); // get setUser from AuthContext
+  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
+  const handleChange = (e) =>
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
+
+    const payload = {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      password: formData.password,
+      role: formData.role.charAt(0).toUpperCase() + formData.role.slice(1),
+    };
+
     try {
-      // 1️⃣ Signup request
-      await signupUser(formData); // hits http://localhost:5000/api/register
-
-      // 2️⃣ Login immediately after signup
-      const response = await loginUser({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      // 3️⃣ Save token and update context
-      localStorage.setItem("token", response.data.token);
-      setUser(response.data.user);
-
-      // 4️⃣ Navigate to role-based dashboard
-      if (response.data.user.role === "donor") navigate("/donor");
-      else if (response.data.user.role === "volunteer") navigate("/volunteer");
-      else if (response.data.user.role === "ngo") navigate("/ngo");
+      const signupResponse = await signupUser(payload);
+      
+      // Store token and user from signup response
+      localStorage.setItem("token", signupResponse.data.token);
+      setUser(signupResponse.data.user);
+      navigate(`/${signupResponse.data.user.role.toLowerCase()}`);
     } catch (err) {
-      console.error(err);
-      if (err.response && err.response.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      console.error("Signup Error:", err);
+      setError(err.response?.data?.message || "Signup failed. Try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+
   return (
-    <div className="max-w-md mx-auto mt-20 p-6 border rounded shadow">
+    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
       <h1 className="text-2xl font-bold mb-4">Signup</h1>
       {error && <p className="text-red-500 mb-4">{error}</p>}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="text"
           name="name"
           placeholder="Name"
+          autoComplete="name"
           value={formData.name}
           onChange={handleChange}
-          required
           className="w-full p-2 border rounded"
-          autoComplete="name"
+          required
         />
         <input
           type="email"
           name="email"
           placeholder="Email"
+          autoComplete="email"
           value={formData.email}
           onChange={handleChange}
-          required
           className="w-full p-2 border rounded"
-          autoComplete="email"
+          required
         />
         <input
           type="password"
           name="password"
           placeholder="Password"
+          autoComplete="new-password"
           value={formData.password}
           onChange={handleChange}
-          required
           className="w-full p-2 border rounded"
-          autoComplete="new-password"
+          required
         />
         <select
           name="role"
@@ -94,11 +92,15 @@ const Signup = () => {
           <option value="volunteer">Volunteer</option>
           <option value="ngo">NGO</option>
         </select>
+
         <button
           type="submit"
-          className="w-full bg-green-600 text-white p-2 rounded"
+          disabled={loading}
+          className={`w-full p-2 rounded text-white ${
+            loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+          } transition`}
         >
-          Signup
+          {loading ? "Signing up..." : "Signup"}
         </button>
       </form>
     </div>

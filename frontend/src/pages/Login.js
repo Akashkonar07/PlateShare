@@ -1,56 +1,43 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/auth";
-import { useAuth } from "../hooks/useAuth"; // named import
+import { useAuth } from "../hooks/useAuth";
 
 const Login = () => {
   const { setUser } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      const data = await loginUser(form);
-      localStorage.setItem("token", data.token);
-      setUser(data.user);
-      navigate("/"); // redirect to home or dashboard
+      const response = await loginUser({ email: form.email, password: form.password });
+      localStorage.setItem("token", response.data.token);
+      setUser(response.data.user);
+      navigate(`/${response.data.user.role.toLowerCase()}`);
     } catch (err) {
-      console.error(err);
-      alert("Login failed. Check your credentials.");
-    }
+      console.error("Login Error:", err);
+      setError(err.response?.data?.message || "Login failed. Try again.");
+    } finally { setLoading(false); }
   };
 
+
   return (
-    <div className="max-w-md mx-auto mt-20 p-4 bg-white shadow rounded">
+    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
       <h2 className="text-2xl font-bold mb-4">Login</h2>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={form.email}
-          onChange={handleChange}
-          required
-          className="w-full p-2 border rounded"
-        />
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          value={form.password}
-          onChange={handleChange}
-          required
-          className="w-full p-2 border rounded"
-        />
-        <button
-          type="submit"
-          className="w-full bg-green-600 text-white p-2 rounded"
-        >
-          Login
+      {error && <p className="text-red-500 mb-3">{error}</p>}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input type="email" name="email" placeholder="Email" autoComplete="email" value={form.email} onChange={handleChange} required className="w-full p-2 border rounded" />
+        <input type="password" name="password" placeholder="Password" autoComplete="current-password" value={form.password} onChange={handleChange} required className="w-full p-2 border rounded" />
+        <button type="submit" disabled={loading} className={`w-full p-2 rounded text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"}`}>
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>

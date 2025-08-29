@@ -9,6 +9,7 @@ import VolunteerDashboard from "./pages/VolunteerDashboard";
 import NGODashboard from "./pages/NGODashboard";
 import { useAuth } from "./hooks/useAuth";
 
+
 // Private route component
 const PrivateRoute = ({ children, roles }) => {
   const { user } = useAuth();
