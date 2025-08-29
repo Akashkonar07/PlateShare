@@ -108,4 +108,12 @@ router.patch(
   donationController.updateDonationStatus
 );
 
+// NGO confirms auto-assignment
+router.post(
+  "/:donationId/confirm-assignment",
+  authenticate,
+  authorize(["NGO"]),
+  donationController.confirmAssignment
+);
+
 module.exports = router;
