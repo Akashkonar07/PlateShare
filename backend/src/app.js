@@ -16,9 +16,12 @@ app.use(cors({
   credentials: true
 }));
 
-// ===== Logging middleware (dev) =====
+// ===== Logging middleware =====
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
+  // Only log non-asset requests
+  if (!req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg)$/)) {
+    console.log(`${req.method} ${req.path}`);
+  }
   next();
 });
 

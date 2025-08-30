@@ -1,14 +1,8 @@
-const { cloudinary, upload } = require('../config/cloudinary');
+const { cloudinary } = require('../config/cloudinary');
 const Donation = require("../models/Donation");
-const User = require("../models/user");
+const User = require("../models/User");
 const AutoAssignmentService = require("../services/autoAssignmentService");
-const { generateCSRPDF, sendCSREmail } = require('../utils/csrGenerator');
-// Import error classes from centralized error handler
-const {
-  NotFoundError,
-  BadRequestError,
-  ForbiddenError
-} = require('../middleware/errorHandler');
+const { generateCSRPDF } = require('../utils/csrGenerator');
 
 // ===== Donor Creates Donation =====
 exports.createDonation = async (req, res) => {
@@ -16,24 +10,16 @@ exports.createDonation = async (req, res) => {
     const { foodType, quantity, bestBefore, latitude, longitude, description } = req.body;
     let photoUrl = null;
 
-    // Upload photo to cloudinary if provided
     if (req.file) {
-      try {
-        // Convert buffer to base64
-        const base64 = req.file.buffer.toString('base64');
-        const dataURI = `data:${req.file.mimetype};base64,${base64}`;
-        
-        // Upload to Cloudinary
-        const result = await cloudinary.uploader.upload(dataURI, {
-          folder: "plateshare/donations",
-          resource_type: "image"
-        });
-        
-        photoUrl = result.secure_url;
-      } catch (error) {
-        console.error('Error uploading to Cloudinary:', error);
-        throw new Error('Failed to upload image. Please try again.');
-      }
+      const base64 = req.file.buffer.toString('base64');
+      const dataURI = `data:${req.file.mimetype};base64,${base64}`;
+      
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: "plateshare/donations",
+        resource_type: "image"
+      });
+      
+      photoUrl = result.secure_url;
     }
 
     const donation = new Donation({
@@ -52,12 +38,10 @@ exports.createDonation = async (req, res) => {
 
     await donation.save();
     
-    // Auto-assign bulk donations (10+ servings) to NGOs
     if (donation.quantity >= 10) {
       setTimeout(async () => {
-        const autoAssignResult = await AutoAssignmentService.autoAssignBulkDonation(donation._id);
-        console.log(`Auto-assignment result for donation ${donation._id}:`, autoAssignResult);
-      }, 1000); // Small delay to ensure donation is fully saved
+        await AutoAssignmentService.autoAssignBulkDonation(donation._id);
+      }, 1000);
     }
     
     // Populate donor info for response
@@ -69,8 +53,7 @@ exports.createDonation = async (req, res) => {
       autoAssignmentTriggered: donation.quantity >= 10
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -119,29 +102,14 @@ exports.acceptDonation = async (req, res) => {
 
 // ===== Volunteer/NGO Confirm Delivery =====
 exports.confirmDelivery = async (req, res) => {
-  console.log('=== confirmDelivery called ===');
-  console.log('Request params:', req.params);
-  console.log('Request body:', req.body);
-  console.log('Request file:', req.file ? {
-    fieldname: req.file.fieldname,
-    originalname: req.file.originalname,
-    mimetype: req.file.mimetype,
-    size: req.file.size,
-    buffer: req.file.buffer ? `Buffer of ${req.file.buffer.length} bytes` : 'No buffer'
-  } : 'No file uploaded');
-
   if (!req.file) {
-    console.error('No delivery photo uploaded');
     return res.status(400).json({
       success: false,
-      message: 'Delivery photo is required',
-      receivedFiles: req.files,
-      fileFields: Object.keys(req.files || {})
+      message: 'Delivery photo is required'
     });
   }
 
   try {
-    console.log('Processing delivery confirmation...');
     const { id: donationId } = req.params;
     const { 
       recipientName, 
@@ -151,26 +119,14 @@ exports.confirmDelivery = async (req, res) => {
       notes 
     } = req.body;
 
-    // Validate and normalize recipient type
     const validTypes = ['Individual', 'NGO', 'Shelter', 'Other'];
-    let recipientType = 'Individual'; // Default value
+    let recipientType = 'Individual';
     
     if (inputRecipientType) {
       const normalizedType = inputRecipientType.trim();
       const capitalizedType = normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1).toLowerCase();
-      
-      // Check if the normalized type is valid, otherwise use 'Other'
       recipientType = validTypes.includes(capitalizedType) ? capitalizedType : 'Other';
     }
-
-    console.log('Request data:', {
-      donationId,
-      recipientName,
-      recipientType,
-      recipientContact,
-      numberOfPeopleServed,
-      notes
-    });
 
     if (!donationId) {
       return res.status(400).json({ message: 'Donation ID is required' });
@@ -184,20 +140,16 @@ exports.confirmDelivery = async (req, res) => {
       return res.status(400).json({ message: 'Invalid donation ID format' });
     }
 
-    console.log('Looking up donation:', donationId);
     const donation = await Donation.findById(donationId)
       .populate('donor', 'name email');
       
     if (!donation) {
-      console.error('Donation not found:', donationId);
       return res.status(404).json({ message: 'Donation not found' });
     }
 
     if (donation.status !== "PickedUp") {
-      console.log(`Invalid status for delivery. Current status: ${donation.status}`);
       return res.status(400).json({ 
-        message: "Donation must be picked up before delivery",
-        currentStatus: donation.status
+        message: "Donation must be picked up before delivery"
       });
     }
 
@@ -405,7 +357,26 @@ exports.declineDonation = async (req, res) => {
 // ===== Get All Donations (for volunteers/NGOs to browse) =====
 exports.getAllDonations = async (req, res) => {
   try {
-    const donations = await Donation.find({})
+    let query = {};
+    
+    // For NGOs, only show unassigned donations or donations assigned to them
+    if (req.user.role === 'NGO') {
+      query = {
+        $or: [
+          { assignedTo: { $exists: false } }, // Unassigned
+          { assignedTo: req.user._id }, // Assigned to this NGO
+          { assignedTo: null } // Explicitly null
+        ],
+        status: { $in: ['Pending', 'Assigned'] } // Only show pending or assigned
+      };
+    } 
+    // For Volunteers, show all donations (existing behavior)
+    else if (req.user.role === 'Volunteer') {
+      query = {};
+    }
+    // For Admins, show all donations (existing behavior)
+    
+    const donations = await Donation.find(query)
       .populate("donor", "name email")
       .populate("assignedTo", "name email role")
       .sort({ createdAt: -1 });
@@ -560,6 +531,74 @@ exports.updateDonationStatus = async (req, res) => {
 };
 
 // ===== NGO Confirms Assignment =====
+// ===== Assign Donation to NGO =====
+exports.assignToNGO = async (req, res) => {
+  try {
+    const { donationId } = req.params;
+    const { notes = '' } = req.body;
+    
+    // Find the donation
+    const donation = await Donation.findById(donationId);
+    if (!donation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Donation not found' 
+      });
+    }
+
+    // Check if donation is available for assignment
+    if (donation.status !== 'Pending' && donation.status !== 'Assigned') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Donation is not available for assignment' 
+      });
+    }
+
+    // Check if the NGO is already assigned
+    if (donation.assignedTo && donation.assignedTo.toString() === req.user._id.toString()) {
+      // If already assigned to this NGO, return success with a message
+      return res.status(200).json({ 
+        success: true, 
+        message: 'You are already assigned to this donation',
+        data: await donation.populate(['assignedTo', 'donor'])
+      });
+    }
+
+    // Update the donation
+    donation.assignedTo = req.user._id;
+    donation.status = 'Assigned';
+    
+    // Add to tracking history
+    donation.trackingHistory = donation.trackingHistory || [];
+    donation.trackingHistory.push({
+      status: 'Assigned',
+      updatedBy: req.user._id,
+      notes: `Assigned to NGO: ${req.user.name}. ${notes}`.trim(),
+      timestamp: new Date()
+    });
+
+    await donation.save();
+
+    // Populate the assignedTo field for the response
+    await donation.populate('assignedTo', 'name email role');
+    await donation.populate('donor', 'name email');
+
+    res.status(200).json({
+      success: true,
+      message: 'Donation assigned successfully',
+      data: donation
+    });
+  } catch (error) {
+    console.error('Error assigning donation to NGO:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// ===== NGO Confirms Assignment =====
 exports.confirmAssignment = async (req, res) => {
   try {
     const { donationId } = req.params;
@@ -581,16 +620,17 @@ exports.confirmAssignment = async (req, res) => {
       return res.status(400).json({ message: 'This donation is not in a state that can be confirmed' });
     }
 
-    // Update the donation status to confirmed
-    donation.status = 'Confirmed';
+    // Update the donation status to PickedUp
+    donation.status = 'PickedUp';
     donation.assignedAt = new Date();
+    donation.pickupTime = new Date();
     
     // Add to tracking history
     donation.trackingHistory = donation.trackingHistory || [];
     donation.trackingHistory.push({
-      status: 'Confirmed',
+      status: 'PickedUp',
       updatedBy: ngoId,
-      notes: 'NGO has confirmed the assignment',
+      notes: 'Donation picked up by NGO',
       timestamp: new Date()
     });
 

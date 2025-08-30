@@ -30,9 +30,28 @@ const authenticate = async (req, res, next) => {
 // Role-based Access Control
 const authorize = (roles = []) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Forbidden: Insufficient role" });
+    if (!req.user) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Not authenticated',
+        path: req.originalUrl
+      });
     }
+
+    if (!Array.isArray(roles)) {
+      roles = [roles];
+    }
+
+    const userRole = req.user.role?.toLowerCase();
+    const hasRole = roles.some(role => role.toLowerCase() === userRole);
+    
+    if (roles.length && !hasRole) {
+      return res.status(403).json({ 
+        success: false,
+        message: `Role '${req.user.role}' is not authorized for this resource`
+      });
+    }
+
     next();
   };
 };

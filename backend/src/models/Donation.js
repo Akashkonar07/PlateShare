@@ -1,6 +1,14 @@
 const mongoose = require("mongoose");
 
-const donationSchema = new mongoose.Schema({
+// Check if the model already exists to prevent recompilation
+let Donation;
+
+try {
+  // Try to get the model if it exists
+  Donation = mongoose.model("Donation");
+} catch (e) {
+  // If it doesn't exist, define it
+  const donationSchema = new mongoose.Schema({
   donor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   foodType: { type: String, required: true },
   quantity: { type: Number, required: true },
@@ -54,7 +62,10 @@ const donationSchema = new mongoose.Schema({
     }
   },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("Donation", donationSchema);
+  Donation = mongoose.model("Donation", donationSchema);
+}
+
+module.exports = Donation;

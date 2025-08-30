@@ -169,4 +169,12 @@ router.post(
   donationController.confirmAssignment
 );
 
+// Assign donation to NGO
+router.post(
+  "/:donationId/assign-ngo",
+  authenticate,
+  authorize(["NGO"]),
+  donationController.assignToNGO
+);
+
 module.exports = router;

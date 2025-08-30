@@ -10,8 +10,22 @@ export const createDonation = async (donationData) => {
 };
 
 export const fetchDonations = async () => {
-  const response = await api.get('/donations');
-  return response.data;
+  try {
+    const token = localStorage.getItem('token');
+    console.log('Fetching donations with token:', token ? 'Token exists' : 'No token found');
+    
+    const response = await api.get('/donations');
+    console.log('Donations fetched successfully');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching donations:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      headers: error.response?.headers
+    });
+    throw error;
+  }
 };
 
 export const getMyDonations = async () => {
@@ -126,23 +140,64 @@ export const declineDonation = async (donationId) => {
 };
 
 export const confirmNGODonation = async (donationId, notes = '') => {
-  // First assign the donation to the NGO
-  await api.post(`/donations/${donationId}/assign`, {});
-
-  // Then confirm the assignment
-  const response = await api.post(
-    `/donations/${donationId}/confirm-assignment`,
-    { notes }
-  );
-  return response.data;
+  try {
+    console.log(`Confirming assignment for donation ${donationId}`);
+    
+    // First try to assign the donation to the NGO
+    console.log(`Attempting to assign donation ${donationId} to NGO`);
+    const assignResponse = await api.post(`/donations/${donationId}/assign-ngo`, { notes });
+    
+    // Check if this was an idempotent response (already assigned)
+    const isAlreadyAssigned = assignResponse.data.message?.includes('already assigned');
+    console.log(isAlreadyAssigned ? 'NGO was already assigned' : 'Assignment successful:', assignResponse.data);
+    
+    // If already assigned and we got a successful response, proceed to confirm
+    if (isAlreadyAssigned && assignResponse.status === 200) {
+      // Continue to confirm the assignment
+      const confirmResponse = await api.post(
+        `/donations/${donationId}/confirm-assignment`,
+        { notes }
+      );
+      console.log('Confirmation successful after already assigned:', confirmResponse.data);
+      return confirmResponse.data;
+    }
+    
+    // If this was a new assignment, confirm it
+    const confirmResponse = await api.post(
+      `/donations/${donationId}/confirm-assignment`,
+      { notes }
+    );
+    console.log('Assignment and confirmation successful:', confirmResponse.data);
+    return confirmResponse.data;
+  } catch (error) {
+    console.error('Error in confirmNGODonation:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        data: error.config?.data
+      }
+    });
+    throw error;
+  }
 };
 
-export const updateDonationStatus = async (donationId, status, notes = '') => {
-  const response = await api.patch(
-    `/donations/${donationId}/status`,
-    { status, notes }
-  );
-  return response.data;
+export const updateDonationStatus = async (donationId, updateData) => {
+  try {
+    console.log(`Updating donation ${donationId} with:`, updateData);
+    const response = await api.patch(`/donations/${donationId}/status`, updateData);
+    console.log('Status update successful:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating donation status:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    throw error;
+  }
 };
 
 export const getDonationTracking = async (donationId) => {

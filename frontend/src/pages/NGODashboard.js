@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { fetchDonations, confirmNGODonation } from "../services/donation";
+import { 
+  fetchDonations, 
+  confirmNGODonation, 
+  updateDonationStatus 
+} from "../services/donation";
 
 const NGODashboard = () => {
   const { user, logout } = useAuth();
@@ -21,25 +25,33 @@ const NGODashboard = () => {
   const fetchAllDonations = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const response = await fetchDonations(token);
+      const response = await fetchDonations();
       
-      const allDonations = response.donations || [];
+      const allDonations = Array.isArray(response.donations) ? response.donations : [];
+      console.log('Fetched donations:', allDonations);
       
       // Filter donations for NGO dashboard
       const availableDonations = allDonations.filter(d => 
-        d.status === "Pending" && d.quantity >= 10 // NGOs handle bulk donations (10+ servings)
+        (d.status === "Pending" || d.status === "Assigned") && 
+        d.quantity >= 10 && // NGOs handle bulk donations (10+ servings)
+        (!d.assignedTo || d.assignedTo._id === user.id) // Either unassigned or assigned to this NGO
       );
       
       const assigned = allDonations.filter(d => 
-        d.assignedTo && d.assignedTo._id === user.id && 
+        d.assignedTo && 
+        d.assignedTo._id === user.id && 
         ["Assigned", "PickedUp"].includes(d.status)
       );
       
       const completed = allDonations.filter(d => 
-        d.assignedTo && d.assignedTo._id === user.id && 
+        d.assignedTo && 
+        d.assignedTo._id === user.id && 
         d.status === "Delivered"
       );
+      
+      console.log('Available donations:', availableDonations);
+      console.log('Assigned donations:', assigned);
+      console.log('Completed donations:', completed);
       
       setDonations(availableDonations);
       setAssignedDonations(assigned);
@@ -80,7 +92,7 @@ const NGODashboard = () => {
       // Accept all selected donations as NGO
       await Promise.all(
         selectedDonations.map(donationId => 
-          confirmNGODonation(donationId, token, 'NGO has accepted the assignment')
+          confirmNGODonation(donationId, 'NGO has accepted the assignment')
         )
       );
       
@@ -95,19 +107,25 @@ const NGODashboard = () => {
 
   const handleStatusUpdate = async (donationId, newStatus) => {
     try {
-      const token = localStorage.getItem("token");
-      await updateDonationStatus(donationId, newStatus, token);
+      console.log(`Updating status to ${newStatus} for donation ${donationId}`);
+      await updateDonationStatus(donationId, { status: newStatus });
+      
+      // Refresh the donations list
       fetchAllDonations();
       
       const statusMessages = {
-        "PickedUp": "Pickup confirmed!",
-        "Delivered": "Delivery completed! Great work!"
+        "PickedUp": "Pickup confirmed! The donation is now in transit.",
+        "Delivered": "Delivery completed! Thank you for your service!"
       };
       
       alert(statusMessages[newStatus] || "Status updated successfully!");
     } catch (error) {
-      console.error("Error updating status:", error);
-      alert("Error updating status. Please try again.");
+      console.error("Error updating status:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      alert(error.response?.data?.message || "Error updating status. Please try again.");
     }
   };
 

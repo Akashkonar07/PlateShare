@@ -1,6 +1,14 @@
 const mongoose = require("mongoose");
 
-const achievementSchema = new mongoose.Schema({
+// Check if the model already exists to prevent recompilation
+let VolunteerProfile;
+
+try {
+  // Try to get the model if it exists
+  VolunteerProfile = mongoose.model("VolunteerProfile");
+} catch (e) {
+  // If it doesn't exist, define it
+  const achievementSchema = new mongoose.Schema({
   badgeId: { type: String, required: true },
   badgeName: { type: String, required: true },
   badgeIcon: { type: String, required: true },
@@ -73,10 +81,11 @@ const volunteerProfileSchema = new mongoose.Schema({
     points: { type: Number, default: 0 },
     deliveries: { type: Number, default: 0 },
     specialBadges: [String]
-  }],
-  
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  }]
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 // Calculate level based on experience points
@@ -186,4 +195,7 @@ volunteerProfileSchema.methods.checkStreakAchievements = function() {
   }
 };
 
-module.exports = mongoose.model("VolunteerProfile", volunteerProfileSchema);
+  VolunteerProfile = mongoose.model("VolunteerProfile", volunteerProfileSchema);
+}
+
+module.exports = VolunteerProfile;
