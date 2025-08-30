@@ -97,30 +97,55 @@ const checkDeliveryAchievements = (profile) => {
 // Get leaderboard
 const getLeaderboard = async (req, res) => {
   try {
-    const { type = "monthly", limit = 10 } = req.query;
+    const { type = "alltime", limit = 20 } = req.query;
     
-    let sortField;
-    switch (type) {
-      case "weekly":
+    let sortField = "totalPoints"; // Default to all-time
+    
+    // Determine which field to sort by based on the type
+    switch (type.toLowerCase()) {
+      case 'weekly':
         sortField = "weeklyPoints";
         break;
-      case "monthly":
+      case 'monthly':
         sortField = "monthlyPoints";
-        break;
-      case "alltime":
-        sortField = "totalPoints";
         break;
       default:
-        sortField = "monthlyPoints";
+        sortField = "totalPoints";
     }
     
-    const leaderboard = await VolunteerProfile.find({
-      "preferences.showOnLeaderboard": true
-    })
-    .populate('user', 'name')
-    .sort({ [sortField]: -1 })
-    .limit(parseInt(limit))
-    .select(`user level ${sortField} stats.totalDeliveries stats.totalServingsDelivered achievements`);
+    // Get leaderboard with all necessary fields
+    const leaderboard = await VolunteerProfile.aggregate([
+      { $match: { "preferences.showOnLeaderboard": true } },
+      { $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user',
+          pipeline: [
+            { $project: { name: 1 } }
+          ]
+      }},
+      { $unwind: '$user' },
+      { $project: {
+          'user.name': 1,
+          'user._id': 1,
+          level: 1,
+          weeklyPoints: { $ifNull: ["$weeklyPoints", 0] },
+          monthlyPoints: { $ifNull: ["$monthlyPoints", 0] },
+          totalPoints: { $ifNull: ["$totalPoints", 0] },
+          'stats.totalDeliveries': { $ifNull: ["$stats.totalDeliveries", 0] },
+          'stats.totalServingsDelivered': { $ifNull: ["$stats.totalServingsDelivered", 0] },
+          achievements: { $ifNull: ["$achievements", []] },
+          preferences: 1
+      }},
+      { $sort: { [sortField]: -1 } },
+      { $limit: parseInt(limit) }
+    ]);
+    
+    // If no results, return empty array instead of null
+    if (!leaderboard || leaderboard.length === 0) {
+      return res.json({ success: true, leaderboard: [], type });
+    }
     
     res.json({ success: true, leaderboard, type });
   } catch (error) {

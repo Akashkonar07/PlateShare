@@ -20,11 +20,16 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (response.data.success) {
-        setLeaderboard(response.data.leaderboard);
+      if (response.data && response.data.success) {
+        // Ensure we always have an array, even if empty
+        setLeaderboard(Array.isArray(response.data.leaderboard) ? response.data.leaderboard : []);
+      } else {
+        console.error('Unexpected response format:', response.data);
+        setLeaderboard([]);
       }
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
+      setLeaderboard([]);
     } finally {
       setLoading(false);
     }
@@ -38,16 +43,14 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
   };
 
   const getPointsForType = (profile) => {
-    switch (selectedType) {
-      case 'weekly':
-        return profile.weeklyPoints;
-      case 'monthly':
-        return profile.monthlyPoints;
-      case 'alltime':
-        return profile.totalPoints;
-      default:
-        return profile.monthlyPoints;
-    }
+    // Handle cases where points might be undefined
+    const points = {
+      weekly: profile.weeklyPoints || 0,
+      monthly: profile.monthlyPoints || 0,
+      alltime: profile.totalPoints || 0
+    };
+    
+    return points[selectedType] || points.monthly;
   };
 
   const getRankIcon = (rank) => {
@@ -74,6 +77,27 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
           <span className="ml-2 text-gray-600">Loading leaderboard...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (leaderboard.length === 0) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-6">
+          <h2 className="text-2xl font-bold flex items-center">
+            🏆 Leaderboard
+          </h2>
+          <p className="text-yellow-100">Top volunteers {getTypeLabel().toLowerCase()}</p>
+        </div>
+        <div className="p-8 text-center">
+          <div className="text-6xl mb-4">🏆</div>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">No volunteers on the leaderboard yet</h3>
+          <p className="text-gray-600 mb-4">Complete deliveries to earn points and climb the ranks!</p>
+          <p className="text-sm text-gray-500">
+            The leaderboard updates automatically when volunteers start completing deliveries.
+          </p>
         </div>
       </div>
     );
@@ -112,14 +136,7 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
 
       {/* Leaderboard List */}
       <div className="divide-y divide-gray-200">
-        {leaderboard.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <div className="text-4xl mb-2">🏆</div>
-            <p>No volunteers on the leaderboard yet.</p>
-            <p className="text-sm">Complete deliveries to earn points and climb the ranks!</p>
-          </div>
-        ) : (
-          leaderboard.map((profile, index) => {
+        {leaderboard.map((profile, index) => {
             const rank = index + 1;
             const points = getPointsForType(profile);
             const isCurrentUser = currentUser && profile.user._id === currentUser.id;
@@ -177,7 +194,7 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
                   <div className={`text-xl font-bold ${
                     isCurrentUser ? 'text-blue-700' : 'text-gray-900'
                   }`}>
-                    {points.toLocaleString()}
+                    {(points || 0).toLocaleString()}
                   </div>
                   <div className="text-xs text-gray-500">points</div>
                 </div>
@@ -194,8 +211,7 @@ const Leaderboard = ({ type = 'monthly', limit = 10 }) => {
                 )}
               </div>
             );
-          })
-        )}
+          })}
       </div>
 
       {/* Footer */}
