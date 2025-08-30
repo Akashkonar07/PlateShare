@@ -2,7 +2,7 @@ const { cloudinary } = require('../config/cloudinary');
 const Donation = require("../models/Donation");
 const User = require("../models/User");
 const AutoAssignmentService = require("../services/autoAssignmentService");
-const { generateCSRPDF } = require('../utils/csrGenerator');
+const { generateCSRPDF, sendCSREmail } = require('../utils/csrGenerator');
 
 // ===== Donor Creates Donation =====
 exports.createDonation = async (req, res) => {
