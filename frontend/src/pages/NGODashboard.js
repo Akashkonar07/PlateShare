@@ -3,7 +3,9 @@ import { useAuth } from "../hooks/useAuth";
 import { 
   fetchDonations, 
   confirmNGODonation, 
-  updateDonationStatus 
+  updateDonationStatus,
+  confirmNGOPickup,
+  confirmNGODelivery
 } from "../services/donation";
 
 const NGODashboard = () => {
@@ -15,6 +17,18 @@ const NGODashboard = () => {
   const [loading, setLoading] = useState(false);
   const [selectedDonations, setSelectedDonations] = useState([]);
   const [filterQuantity, setFilterQuantity] = useState("all");
+  const [showPickupModal, setShowPickupModal] = useState(false);
+  const [currentDonation, setCurrentDonation] = useState(null);
+  const [pickupPhoto, setPickupPhoto] = useState(null);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [deliveryForm, setDeliveryForm] = useState({
+    recipientName: '',
+    recipientType: 'Individual',
+    recipientContact: '',
+    numberOfPeopleServed: 1,
+    notes: ''
+  });
+  const [deliveryPhoto, setDeliveryPhoto] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -87,34 +101,68 @@ const NGODashboard = () => {
     }
 
     try {
-      const token = localStorage.getItem("token");
-      
       // Accept all selected donations as NGO
-      await Promise.all(
+      const results = await Promise.allSettled(
         selectedDonations.map(donationId => 
           confirmNGODonation(donationId, 'NGO has accepted the assignment')
         )
       );
       
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      
       setSelectedDonations([]);
       fetchAllDonations();
-      alert(`Successfully accepted ${selectedDonations.length} donations!`);
+      
+      if (successful > 0) {
+        alert(`Successfully accepted ${successful} donation(s)!`);
+      }
+      if (failed > 0) {
+        alert(`Failed to accept ${failed} donation(s). Please try again.`);
+      }
     } catch (error) {
       console.error("Error accepting donations:", error);
-      alert("Error accepting donations. Please try again.");
+      alert("Error accepting donations. " + (error.response?.data?.message || "Please try again."));
     }
   };
 
   const handleStatusUpdate = async (donationId, newStatus) => {
     try {
       console.log(`Updating status to ${newStatus} for donation ${donationId}`);
-      await updateDonationStatus(donationId, { status: newStatus });
       
-      // Refresh the donations list
+      const donation = [...assignedDonations, ...donations].find(d => d._id === donationId);
+      
+      if (newStatus === 'PickedUp') {
+        // For pickup, show the photo upload modal
+        if (donation) {
+          setCurrentDonation(donation);
+          setShowPickupModal(true);
+        }
+        return;
+      }
+      
+      if (newStatus === 'Delivered') {
+        // For delivery, show the delivery confirmation form
+        if (donation) {
+          setCurrentDonation(donation);
+          setDeliveryForm({
+            recipientName: '',
+            recipientType: 'Individual',
+            recipientContact: '',
+            numberOfPeopleServed: 1,
+            notes: ''
+          });
+          setDeliveryPhoto(null);
+          setShowDeliveryModal(true);
+        }
+        return;
+      }
+      
+      // For other status updates
+      await updateDonationStatus(donationId, { status: newStatus });
       fetchAllDonations();
       
       const statusMessages = {
-        "PickedUp": "Pickup confirmed! The donation is now in transit.",
         "Delivered": "Delivery completed! Thank you for your service!"
       };
       
@@ -126,6 +174,78 @@ const NGODashboard = () => {
         status: error.response?.status
       });
       alert(error.response?.data?.message || "Error updating status. Please try again.");
+    }
+  };
+  
+  const handlePickupPhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPickupPhoto(file);
+    }
+  };
+  
+  const handleConfirmPickup = async () => {
+    if (!currentDonation) return;
+    
+    try {
+      await confirmNGOPickup(currentDonation._id, pickupPhoto);
+      
+      // Close modal and reset state
+      setShowPickupModal(false);
+      setCurrentDonation(null);
+      setPickupPhoto(null);
+      
+      // Refresh data
+      fetchAllDonations();
+      alert("Pickup confirmed successfully!");
+    } catch (error) {
+      console.error("Error confirming pickup:", error);
+      alert(error.response?.data?.message || "Error confirming pickup. Please try again.");
+    }
+  };
+
+  const handleDeliveryFormChange = (e) => {
+    const { name, value } = e.target;
+    setDeliveryForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleDeliveryPhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setDeliveryPhoto(file);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!currentDonation) return;
+    
+    try {
+      if (!deliveryPhoto) {
+        alert('Please upload a delivery photo');
+        return;
+      }
+      
+      if (!deliveryForm.recipientName) {
+        alert('Please enter recipient name');
+        return;
+      }
+      
+      await confirmNGODelivery(currentDonation._id, deliveryForm, deliveryPhoto);
+      
+      // Close modal and reset state
+      setShowDeliveryModal(false);
+      setCurrentDonation(null);
+      setDeliveryPhoto(null);
+      
+      // Refresh data
+      fetchAllDonations();
+      alert('Delivery confirmed successfully! A CSR report has been sent to the donor.');
+    } catch (error) {
+      console.error('Error confirming delivery:', error);
+      alert(error.response?.data?.message || 'Error confirming delivery. Please try again.');
     }
   };
 
@@ -486,6 +606,178 @@ const NGODashboard = () => {
           )}
         </div>
       </div>
+      
+      {/* Pickup Confirmation Modal */}
+      {showPickupModal && currentDonation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Confirm Pickup</h3>
+            <p className="mb-4">Please upload a photo of the pickup location for {currentDonation.foodType}.</p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Pickup Photo (Required)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePickupPhotoChange}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-md file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-blue-50 file:text-blue-700
+                  hover:file:bg-blue-100"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowPickupModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPickup}
+                disabled={!pickupPhoto}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
+                  pickupPhoto ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Confirm Pickup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeliveryModal && currentDonation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Confirm Delivery</h3>
+            <p className="mb-4">Please provide delivery details for {currentDonation.foodType}.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Recipient Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="recipientName"
+                  value={deliveryForm.recipientName}
+                  onChange={handleDeliveryFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Recipient Type
+                </label>
+                <select
+                  name="recipientType"
+                  value={deliveryForm.recipientType}
+                  onChange={handleDeliveryFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Individual">Individual</option>
+                  <option value="NGO">NGO</option>
+                  <option value="Shelter">Shelter</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contact Information
+                </label>
+                <input
+                  type="text"
+                  name="recipientContact"
+                  value={deliveryForm.recipientContact}
+                  onChange={handleDeliveryFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Phone number or email"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Number of People Served
+                </label>
+                <input
+                  type="number"
+                  name="numberOfPeopleServed"
+                  min="1"
+                  value={deliveryForm.numberOfPeopleServed}
+                  onChange={handleDeliveryFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  name="notes"
+                  value={deliveryForm.notes}
+                  onChange={handleDeliveryFormChange}
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Any additional notes about the delivery..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Delivery Photo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleDeliveryPhotoChange}
+                  className="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
+                  required
+                />
+                {deliveryPhoto && (
+                  <p className="mt-1 text-sm text-green-600">Photo selected: {deliveryPhoto.name}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowDeliveryModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelivery}
+                disabled={!deliveryPhoto || !deliveryForm.recipientName}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
+                  deliveryPhoto && deliveryForm.recipientName 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Confirm Delivery
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
