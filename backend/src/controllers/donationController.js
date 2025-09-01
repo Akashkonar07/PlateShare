@@ -1,8 +1,8 @@
 const { cloudinary } = require('../config/cloudinary');
 const Donation = require("../models/Donation");
-const User = require("../models/User");
+const User = require("../models/user");
 const AutoAssignmentService = require("../services/autoAssignmentService");
-const { generateCSRPDF } = require('../utils/csrGenerator');
+const { generateCSRPDF, sendCSREmail } = require('../utils/csrGenerator');
 
 // ===== Donor Creates Donation =====
 exports.createDonation = async (req, res) => {
@@ -102,13 +102,6 @@ exports.acceptDonation = async (req, res) => {
 
 // ===== Volunteer/NGO Confirm Delivery =====
 exports.confirmDelivery = async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({
-      success: false,
-      message: 'Delivery photo is required'
-    });
-  }
-
   try {
     const { id: donationId } = req.params;
     const { 
@@ -129,210 +122,186 @@ exports.confirmDelivery = async (req, res) => {
     }
 
     if (!donationId) {
-      return res.status(400).json({ message: 'Donation ID is required' });
-    }
-
-    if (!recipientName || !recipientType) {
-      return res.status(400).json({ message: 'Recipient name and type are required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Donation ID is required' 
+      });
     }
 
     if (!donationId.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ message: 'Invalid donation ID format' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid donation ID format' 
+      });
     }
 
+    // Find and populate donation with donor and assignee details
     const donation = await Donation.findById(donationId)
-      .populate('donor', 'name email');
+      .populate('donor', 'name email')
+      .populate('assignedTo', 'name email role');
       
     if (!donation) {
-      return res.status(404).json({ message: 'Donation not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Donation not found' 
+      });
     }
 
+    // Verify donation status
     if (donation.status !== "PickedUp") {
       return res.status(400).json({ 
-        message: "Donation must be picked up before delivery"
+        success: false,
+        message: `Donation must be in 'PickedUp' status for delivery confirmation. Current status: ${donation.status}`
       });
     }
-
-    // Check if the user is assigned to this donation
-    if (donation.assignedTo.toString() !== req.user._id.toString()) {
-      console.log(`User ${req.user._id} not authorized to update donation ${donationId}`);
-      return res.status(403).json({ 
-        message: 'Not authorized to update this donation',
-        assignedTo: donation.assignedTo,
-        currentUser: req.user._id
-      });
-    }
-
-    // Check if delivery photo is provided
-    if (!req.file) {
-      console.log('No delivery photo provided in the request');
-      return res.status(400).json({ 
-        message: 'Delivery photo is required',
-        receivedFiles: req.files,
-        fileFields: Object.keys(req.files || {})
-      });
-    }
-
-    // Upload delivery photo
-    let deliveryPhotoUrl = null;
-    try {
-      console.log('Starting file upload to Cloudinary...');
-      console.log('File details:', {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        hasBuffer: !!req.file.buffer
-      });
-      
-      if (!req.file.buffer) {
-        throw new Error('File buffer is empty');
-      }
-      
-      const base64 = req.file.buffer.toString('base64');
-      const dataURI = `data:${req.file.mimetype};base64,${base64}`;
-      
-      console.log('Uploading file to Cloudinary...');
-      const uploadResult = await cloudinary.uploader.upload(dataURI, {
-        folder: "plateshare/deliveries",
-        resource_type: 'auto',
-        chunk_size: 6000000, // 6MB chunks for large files
-        timeout: 30000 // 30 seconds timeout
-      });
-      
-      console.log('Cloudinary upload successful:', {
-        url: uploadResult.secure_url,
-        bytes: uploadResult.bytes,
-        format: uploadResult.format,
-        width: uploadResult.width,
-        height: uploadResult.height
-      });
-      
-      deliveryPhotoUrl = uploadResult.secure_url;
-    } catch (uploadError) {
-      console.error('Error uploading delivery photo to Cloudinary:', {
-        error: uploadError.message,
-        stack: uploadError.stack,
-        name: uploadError.name,
-        http_code: uploadError.http_code,
-        file: req.file ? {
-          originalname: req.file.originalname,
-          size: req.file.size,
-          mimetype: req.file.mimetype,
-          hasBuffer: !!req.file.buffer
-        } : 'No file',
-        cloudinaryError: uploadError.response ? {
-          status: uploadError.response.status,
-          statusText: uploadError.response.statusText,
-          data: uploadError.response.data
-        } : 'No response from Cloudinary'
-      });
-      return res.status(500).json({ 
-        message: 'Error uploading delivery photo',
-        error: uploadError.message,
-        code: uploadError.http_code || 'CLOUDINARY_UPLOAD_ERROR'
-      });
-    }
-
     
-    const deliveryData = {
-      'csrDetails.recipientName': req.body.recipientName,
-      'csrDetails.recipientType': recipientType,
-      'csrDetails.numberOfPeopleServed': parseInt(req.body.numberOfPeopleServed) || 1,
-      'csrDetails.notes': req.body.notes,
-      'deliveryPhotoUrl': deliveryPhotoUrl,
-      'status': 'Delivered',
-      'actualDeliveryTime': new Date()
+    // Verify user is assigned to this donation
+    if (!donation.assignedTo || donation.assignedTo._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Not authorized to update this donation',
+        error: 'USER_NOT_AUTHORIZED'
+      });
+    }
+
+    // Upload delivery photo to Cloudinary
+    let deliveryPhotoUrl = null;
+    if (req.file) {
+      try {
+        const base64 = req.file.buffer.toString('base64');
+        const dataURI = `data:${req.file.mimetype};base64,${base64}`;
+        
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: `plateshare/deliveries/${donationId}`,
+          resource_type: 'image',
+          public_id: `delivery_${Date.now()}`
+        });
+        
+        deliveryPhotoUrl = result.secure_url;
+      } catch (uploadError) {
+        console.error('Error uploading delivery photo:', uploadError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to upload delivery photo',
+          error: uploadError.message
+        });
+      }
+    }
+
+    // Update donation with delivery details
+    donation.status = 'Delivered';
+    donation.deliveryDetails = {
+      deliveredAt: new Date(),
+      deliveredBy: req.user._id,
+      recipientName: recipientName.trim(),
+      recipientType,
+      recipientContact: recipientContact ? recipientContact.trim() : '',
+      numberOfPeopleServed: parseInt(numberOfPeopleServed) || 1,
+      notes: notes ? notes.trim() : '',
+      deliveryPhotoUrl
     };
     
-    // Update donation with delivery data
-    donation.csrDetails = donation.csrDetails || {};
-    donation.csrDetails.recipientName = req.body.recipientName;
-    donation.csrDetails.recipientType = recipientType;
-    donation.csrDetails.numberOfPeopleServed = parseInt(req.body.numberOfPeopleServed) || 1;
-    donation.csrDetails.notes = req.body.notes;
-    donation.deliveryPhotoUrl = deliveryPhotoUrl;
-    donation.status = 'Delivered';
-    donation.actualDeliveryTime = new Date();
-    
-    // Add tracking entry with photo
+    // Add to tracking history
     donation.trackingHistory = donation.trackingHistory || [];
     donation.trackingHistory.push({
-      status: "Delivered",
+      status: 'Delivered',
       timestamp: new Date(),
       updatedBy: req.user._id,
-      notes: `Delivery completed by ${req.user.name}`,
-      photoUrl: deliveryPhotoUrl
+      notes: `Delivered to ${recipientName} (${recipientType})`,
+      ...(deliveryPhotoUrl && { photoUrl: deliveryPhotoUrl })
     });
-    
-    // Save the updated donation
+
     await donation.save();
-    
-    // Refresh the document to ensure we have the latest data
-    const updatedDonation = await Donation.findById(donationId)
-      .populate('donor', 'name email')
-      .populate('assignedTo', 'name email');
 
-    // Generate and send CSR certificate to donor
-    let csrGenerated = false;
+    // Generate and send CSR report to donor
     try {
-      // Get donor details
-      const donor = await User.findById(donation.donor);
-      if (donor && donor.email) {
-        // Generate CSR PDF
-        const pdfBuffer = await generateCSRPDF(donation, donor);
-        
-        // Send email with CSR certificate
-        csrGenerated = await sendCSREmail(donation, donor, pdfBuffer);
-        
-        if (csrGenerated) {
-          console.log(`CSR certificate sent to donor: ${donor.email}`);
-        } else {
-          console.error('Failed to send CSR certificate email');
+      const donationForCSR = {
+        _id: donation._id,
+        foodType: donation.foodType,
+        quantity: donation.quantity,
+        createdAt: donation.createdAt,
+        pickupTime: donation.pickupTime,
+        deliveryDetails: {
+          deliveredAt: donation.deliveryDetails.deliveredAt,
+          recipientName,
+          recipientType,
+          numberOfPeopleServed: donation.deliveryDetails.numberOfPeopleServed,
+          notes: donation.deliveryDetails.notes,
+          deliveryPhotoUrl
+        },
+        csrDetails: {
+          recipientName,
+          recipientType
         }
-      }
+      };
+
+      const donorInfo = {
+        name: donation.donor?.name || 'Anonymous Donor',
+        email: donation.donor?.email
+      };
+
+      // Generate PDF buffer
+      const pdfBuffer = await generateCSRPDF(donationForCSR, donorInfo);
+
+      // Send email with PDF attachment
+      await sendCSREmail(donationForCSR, donorInfo, pdfBuffer);
+
+      console.log(`CSR report sent to ${donation.donor.email} for donation ${donation._id}`);
     } catch (csrError) {
-      console.error('Error generating/sending CSR certificate:', csrError);
-      // Don't fail the delivery confirmation if CSR generation fails
+      console.error('Error generating/sending CSR report:', csrError);
+      // Don't fail the request if CSR generation fails
     }
 
-    // Update volunteer stats and gamification (only for volunteers, not NGOs)
-    if (req.user.role === "Volunteer") {
-      try {
-        const { updateVolunteerStats } = require("./volunteerController");
-        const result = await updateVolunteerStats(req.user._id, donation);
+    // Update user stats based on role
+    try {
+      const update = {
+        $inc: {},
+        $set: { lastDelivery: new Date() }
+      };
+
+      if (req.user.role === 'NGO') {
+        update.$inc['ngoStats.mealsDelivered'] = donation.quantity || 1;
+        update.$inc['ngoStats.totalDeliveries'] = 1;
+      } else {
+        // Volunteer stats
+        update.$inc['volunteerStats.deliveriesCompleted'] = 1;
+        update.$inc['volunteerStats.mealsDelivered'] = donation.quantity || 1;
         
-        res.status(200).json({ 
-          success: true,
-          message: "Donation delivered successfully", 
-          donation: updatedDonation,
-          csrGenerated,
-          gamification: result ? {
-            pointsEarned: result.pointsEarned,
-            leveledUp: result.leveledUp,
-            newLevel: result.profile?.level
-          } : null
-        });
-      } catch (gamificationError) {
-        console.error("Gamification update failed:", gamificationError);
-        // Still return success for delivery, even if gamification fails
-        res.status(200).json({ 
-          success: true,
-          message: "Donation delivered successfully", 
-          donation: updatedDonation,
-          csrGenerated: true
-        });
+        // Calculate points (10 base + 1 per meal)
+        const pointsEarned = 10 + (donation.quantity || 1);
+        update.$inc['volunteerStats.points'] = pointsEarned;
       }
-    } else {
-      res.status(200).json({ 
-        success: true,
-        message: "Donation delivered successfully", 
-        donation: updatedDonation,
-        csrGenerated
-      });
+
+      await User.findByIdAndUpdate(req.user._id, update);
+    } catch (statsError) {
+      console.error('Error updating user stats:', statsError);
+      // Continue even if stats update fails
     }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+
+    // Return success response with delivery details
+    res.status(200).json({
+      success: true,
+      message: 'Delivery confirmed successfully',
+      donation: {
+        _id: donation._id,
+        status: donation.status,
+        deliveredAt: donation.deliveryDetails.deliveredAt,
+        recipientName: donation.deliveryDetails.recipientName,
+        recipientType: donation.deliveryDetails.recipientType,
+        deliveryPhotoUrl: donation.deliveryDetails.deliveryPhotoUrl
+      },
+      csrReport: {
+        sent: true,
+        recipient: donation.donor.email
+      }
+    });
+  } catch (error) {
+    console.error('Error in confirmDelivery:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error confirming delivery',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -388,54 +357,358 @@ exports.getAllDonations = async (req, res) => {
   }
 };
 
-// ===== Get Assigned Donations for Volunteer/NGO =====
-exports.getAssignedDonations = async (req, res) => {
-  try {
-    const donations = await Donation.find({
-      assignedTo: req.user._id,
-      status: { $in: ["Assigned", "PickedUp"] },
-    })
-    .populate("donor", "name email")
-    .sort({ createdAt: -1 });
-
-    res.json({ donations });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ===== Confirm Pickup of a Donation =====
-exports.confirmPickup = async (req, res) => {
+// ===== Confirm NGO Pickup =====
+exports.confirmNGOPickup = async (req, res) => {
   try {
     const { donationId } = req.params;
     
     const donation = await Donation.findById(donationId);
     if (!donation) {
-      return res.status(404).json({ message: "Donation not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Donation not found" 
+      });
     }
 
-    // Check if the user is assigned to this donation
+    // Check if the NGO is assigned to this donation
     if (!donation.assignedTo || donation.assignedTo.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to update this donation" });
+      return res.status(403).json({ 
+        success: false,
+        message: "Not authorized to update this donation" 
+      });
+    }
+
+    // Verify the donation is in correct status (must be Assigned)
+    if (donation.status !== 'Assigned') {
+      return res.status(400).json({ 
+        success: false,
+        message: `Cannot pickup donation in ${donation.status} status. Donation must be in 'Assigned' status.`
+      });
     }
 
     // Update status and add tracking entry
     donation.status = "PickedUp";
+    donation.pickupTime = new Date();
+    
     donation.trackingHistory = donation.trackingHistory || [];
     donation.trackingHistory.push({
       status: "PickedUp",
       timestamp: new Date(),
       updatedBy: req.user._id,
-      notes: `Pickup confirmed by ${req.user.name}`
+      notes: `Pickup confirmed by NGO: ${req.user.name}`
     });
 
     await donation.save();
     
-    await donation.populate("donor", "name email");
-    await donation.populate("assignedTo", "name email role");
+    // Populate all necessary fields for response
+    await donation.populate([
+      { path: 'donor', select: 'name email' },
+      { path: 'assignedTo', select: 'name email role' }
+    ]);
 
-    res.json({ success: true, donation });
+    // Update NGO stats
+    try {
+      await User.findByIdAndUpdate(req.user._id, {
+        $inc: { 'ngoStats.mealsCollected': donation.quantity || 1 },
+        $set: { 'ngoStats.lastPickup': new Date() }
+      });
+    } catch (statsError) {
+      console.error('Error updating NGO stats:', statsError);
+      // Continue even if stats update fails
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'NGO pickup confirmed successfully',
+      donation 
+    });
+  } catch (error) {
+    console.error('Error in confirmNGOPickup:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error confirming NGO pickup',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// ===== Confirm NGO Delivery =====
+exports.confirmNGODelivery = async (req, res) => {
+  try {
+    const { donationId } = req.params;
+    const { 
+      recipientName, 
+      recipientType: inputRecipientType, 
+      recipientContact, 
+      numberOfPeopleServed, 
+      notes 
+    } = req.body;
+
+    const validTypes = ['Individual', 'NGO', 'Shelter', 'Other'];
+    let recipientType = 'Individual';
+    
+    if (inputRecipientType) {
+      const normalizedType = inputRecipientType.trim();
+      const capitalizedType = normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1).toLowerCase();
+      recipientType = validTypes.includes(capitalizedType) ? capitalizedType : 'Other';
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery photo is required'
+      });
+    }
+
+    // Upload delivery photo to Cloudinary
+    const base64 = req.file.buffer.toString('base64');
+    const dataURI = `data:${req.file.mimetype};base64,${base64}`;
+    
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: "plateshare/ngo-deliveries",
+      resource_type: "image",
+      public_id: `delivery_${Date.now()}`
+    });
+    
+    const donation = await Donation.findById(donationId)
+      .populate('donor', 'name email')
+      .populate('assignedTo', 'name email role');
+      
+    if (!donation) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Donation not found' 
+      });
+    }
+
+    // Verify the NGO is assigned to this donation
+    if (!donation.assignedTo || donation.assignedTo._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Not authorized to update this donation',
+        error: 'USER_NOT_AUTHORIZED'
+      });
+    }
+
+    // Verify donation status is PickedUp
+    if (donation.status !== 'PickedUp') {
+      return res.status(400).json({ 
+        success: false,
+        message: `Donation must be in 'PickedUp' status for delivery confirmation. Current status: ${donation.status}`
+      });
+    }
+
+    const deliveryPhotoUrl = result.secure_url;
+
+    // Update donation with delivery details
+    donation.status = 'Delivered';
+    donation.deliveryDetails = {
+      deliveredAt: new Date(),
+      deliveredBy: req.user._id,
+      recipientName: recipientName.trim(),
+      recipientType,
+      recipientContact: recipientContact ? recipientContact.trim() : '',
+      numberOfPeopleServed: parseInt(numberOfPeopleServed) || 1,
+      notes: notes ? notes.trim() : '',
+      deliveryPhotoUrl
+    };
+    
+    // Add to tracking history
+    donation.trackingHistory = donation.trackingHistory || [];
+    donation.trackingHistory.push({
+      status: 'Delivered',
+      timestamp: new Date(),
+      updatedBy: req.user._id,
+      notes: `Delivered to ${recipientName} (${recipientType}) by NGO`,
+      photoUrl: deliveryPhotoUrl
+    });
+
+    await donation.save();
+
+    // Generate and send CSR report to donor
+    try {
+      const donationForCSR = {
+        _id: donation._id,
+        foodType: donation.foodType,
+        quantity: donation.quantity,
+        createdAt: donation.createdAt,
+        pickupTime: donation.pickupTime,
+        deliveryDetails: {
+          deliveredAt: donation.deliveryDetails.deliveredAt,
+          recipientName,
+          recipientType,
+          numberOfPeopleServed: donation.deliveryDetails.numberOfPeopleServed,
+          notes: donation.deliveryDetails.notes,
+          deliveryPhotoUrl
+        },
+        csrDetails: {
+          recipientName,
+          recipientType
+        }
+      };
+
+      const donorInfo = {
+        name: donation.donor?.name || 'Anonymous Donor',
+        email: donation.donor?.email
+      };
+
+      // Generate PDF buffer
+      const pdfBuffer = await generateCSRPDF(donationForCSR, donorInfo);
+
+      // Send email with PDF attachment
+      await sendCSREmail(donationForCSR, donorInfo, pdfBuffer);
+
+      console.log(`CSR report sent to ${donation.donor.email} for donation ${donation._id}`);
+    } catch (csrError) {
+      console.error('Error generating/sending CSR report:', csrError);
+      // Don't fail the request if CSR generation fails
+    }
+
+    // Update NGO stats
+    try {
+      await User.findByIdAndUpdate(req.user._id, {
+        $inc: { 
+          'ngoStats.mealsDelivered': donation.quantity || 1,
+          'ngoStats.totalDeliveries': 1 
+        },
+        $set: { 'ngoStats.lastDelivery': new Date() }
+      });
+    } catch (statsError) {
+      console.error('Error updating NGO stats:', statsError);
+      // Continue even if stats update fails
+    }
+
+    // Return success response with delivery details
+    res.status(200).json({
+      success: true,
+      message: 'NGO delivery confirmed successfully',
+      donation: {
+        _id: donation._id,
+        status: donation.status,
+        deliveredAt: donation.deliveryDetails.deliveredAt,
+        recipientName: donation.deliveryDetails.recipientName,
+        recipientType: donation.deliveryDetails.recipientType,
+        deliveryPhotoUrl: donation.deliveryDetails.deliveryPhotoUrl
+      }
+    });
+  } catch (error) {
+    console.error('Error in confirmNGODelivery:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error confirming NGO delivery',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// ===== Get Assigned Donations for Volunteer/NGO =====
+exports.getAssignedDonations = async (req, res) => {
+  try {
+    const query = {
+      assignedTo: req.user._id,
+      status: { $in: ["Assigned", "PickedUp", "Accepted"] },
+    };
+
+    // For NGOs, also include donations they've been assigned to but not yet accepted
+    if (req.user.role === 'NGO') {
+      query.$or = [
+        { status: { $in: ["Assigned", "PickedUp"] } },
+        { status: "Accepted", assignedTo: req.user._id }
+      ];
+    }
+
+    const donations = await Donation.find(query)
+      .populate("donor", "name email")
+      .populate("assignedTo", "name email role")
+      .sort({ createdAt: -1 });
+
+    res.json({ 
+      success: true,
+      count: donations.length,
+      donations 
+    });
+  } catch (err) {
+    console.error('Error in getAssignedDonations:', err);
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching assigned donations",
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+// ===== Confirm Pickup of a Donation (Volunteer Only) =====
+exports.confirmPickup = async (req, res) => {
+  try {
+    const { donationId } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pickup photo is required'
+      });
+    }
+
+    // Upload photo to Cloudinary
+    const base64 = req.file.buffer.toString('base64');
+    const dataURI = `data:${req.file.mimetype};base64,${base64}`;
+    
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: "plateshare/pickups",
+      resource_type: "image"
+    });
+    
+    const donation = await Donation.findById(donationId);
+    if (!donation) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Donation not found" 
+      });
+    }
+
+    // Check if the user is assigned to this donation
+    if (!donation.assignedTo || donation.assignedTo.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Not authorized to update this donation" 
+      });
+    }
+
+    // Verify the donation is in correct status
+    if (donation.status !== 'Assigned' && donation.status !== 'Accepted') {
+      return res.status(400).json({ 
+        success: false,
+        message: `Cannot pickup donation in ${donation.status} status`
+      });
+    }
+
+    // Update status and add tracking entry with photo
+    donation.status = "PickedUp";
+    donation.pickupTime = new Date();
+    donation.pickupPhotoUrl = result.secure_url;
+    
+    donation.trackingHistory = donation.trackingHistory || [];
+    donation.trackingHistory.push({
+      status: "PickedUp",
+      timestamp: new Date(),
+      updatedBy: req.user._id,
+      notes: `Pickup confirmed by ${req.user.name}`,
+      photoUrl: result.secure_url
+    });
+
+    await donation.save();
+    
+    // Populate all necessary fields for response
+    await donation.populate([
+      { path: 'donor', select: 'name email' },
+      { path: 'assignedTo', select: 'name email role' }
+    ]);
+
+    res.json({ 
+      success: true, 
+      message: 'Pickup confirmed successfully',
+      donation 
+    });
   } catch (error) {
     console.error("Error confirming pickup:", error);
     res.status(500).json({ message: "Server error" });
@@ -607,34 +880,48 @@ exports.confirmAssignment = async (req, res) => {
     // Find the donation
     const donation = await Donation.findById(donationId);
     if (!donation) {
-      return res.status(404).json({ message: 'Donation not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Donation not found' 
+      });
     }
 
     // Verify the donation is assigned to this NGO
     if (!donation.assignedTo || donation.assignedTo.toString() !== ngoId.toString()) {
-      return res.status(403).json({ message: 'This donation is not assigned to your NGO' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'This donation is not assigned to your NGO' 
+      });
     }
 
-    // Verify the donation is in correct status
-    if (donation.status !== 'Assigned') {
-      return res.status(400).json({ message: 'This donation is not in a state that can be confirmed' });
+    // Verify the donation is in correct status (Pending or Assigned)
+    if (!['Pending', 'Assigned'].includes(donation.status)) {
+      return res.status(400).json({ 
+        success: false,
+        message: `Cannot confirm assignment for donation in ${donation.status} status` 
+      });
     }
 
-    // Update the donation status to PickedUp
-    donation.status = 'PickedUp';
-    donation.assignedAt = new Date();
-    donation.pickupTime = new Date();
+    // Update the donation status to Assigned
+    donation.status = 'Assigned';
+    donation.assignedAt = donation.assignedAt || new Date();
     
     // Add to tracking history
     donation.trackingHistory = donation.trackingHistory || [];
     donation.trackingHistory.push({
-      status: 'PickedUp',
+      status: 'Assigned',
       updatedBy: ngoId,
-      notes: 'Donation picked up by NGO',
+      notes: 'NGO has accepted the assignment',
       timestamp: new Date()
     });
 
     await donation.save();
+    
+    // Populate the response data
+    await donation.populate([
+      { path: 'donor', select: 'name email' },
+      { path: 'assignedTo', select: 'name email role' }
+    ]);
 
     res.status(200).json({
       success: true,
@@ -646,8 +933,8 @@ exports.confirmAssignment = async (req, res) => {
     console.error('Error confirming assignment:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Error confirming assignment',
-      error: process.env.NODE_ENV === 'development' ? error : {}
+      message: 'Error confirming assignment',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
