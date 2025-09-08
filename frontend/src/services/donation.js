@@ -141,34 +141,29 @@ export const declineDonation = async (donationId) => {
 
 export const confirmNGODonation = async (donationId, notes = '') => {
   try {
-    console.log(`Confirming assignment for donation ${donationId}`);
+    console.log(`Initiating NGO assignment for donation ${donationId}`);
     
-    // First try to assign the donation to the NGO
-    console.log(`Attempting to assign donation ${donationId} to NGO`);
+    // First, assign the donation to the NGO
+    console.log(`Assigning donation ${donationId} to NGO`);
     const assignResponse = await api.post(`/donations/${donationId}/assign-ngo`, { notes });
     
-    // Check if this was an idempotent response (already assigned)
+    // Check if assignment was successful or already assigned
     const isAlreadyAssigned = assignResponse.data.message?.includes('already assigned');
-    console.log(isAlreadyAssigned ? 'NGO was already assigned' : 'Assignment successful:', assignResponse.data);
+    console.log(isAlreadyAssigned ? 'NGO was already assigned' : 'Assignment successful');
     
-    // If already assigned and we got a successful response, proceed to confirm
-    if (isAlreadyAssigned && assignResponse.status === 200) {
-      // Continue to confirm the assignment
-      const confirmResponse = await api.post(
-        `/donations/${donationId}/confirm-assignment`,
-        { notes }
-      );
-      console.log('Confirmation successful after already assigned:', confirmResponse.data);
-      return confirmResponse.data;
-    }
-    
-    // If this was a new assignment, confirm it
+    // Confirm the assignment
+    console.log('Confirming assignment...');
     const confirmResponse = await api.post(
       `/donations/${donationId}/confirm-assignment`,
       { notes }
     );
-    console.log('Assignment and confirmation successful:', confirmResponse.data);
-    return confirmResponse.data;
+    
+    console.log('Assignment confirmed:', confirmResponse.data);
+    return {
+      ...confirmResponse.data,
+      // Indicate that this was an assignment + confirmation
+      isNewAssignment: !isAlreadyAssigned
+    };
   } catch (error) {
     console.error('Error in confirmNGODonation:', {
       message: error.message,
@@ -179,6 +174,94 @@ export const confirmNGODonation = async (donationId, notes = '') => {
         method: error.config?.method,
         data: error.config?.data
       }
+    });
+    throw error;
+  }
+};
+
+export const confirmNGOPickup = async (donationId, photo) => {
+  try {
+    console.log(`Confirming NGO pickup for donation ${donationId}`);
+    const formData = new FormData();
+    
+    if (photo) {
+      console.log('Processing pickup photo...');
+      if (photo instanceof Blob) {
+        const fileName = `pickup-${Date.now()}.jpg`;
+        formData.append('pickupPhoto', photo, fileName);
+      } else if (typeof photo === 'string') {
+        const response = await fetch(photo);
+        const blob = await response.blob();
+        const fileName = `pickup-${Date.now()}.jpg`;
+        formData.append('pickupPhoto', blob, fileName);
+      }
+    }
+
+    const response = await api.post(
+      `/donations/${donationId}/ngo-pickup`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    
+    console.log('NGO pickup confirmed:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error in confirmNGOPickup:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    throw error;
+  }
+};
+
+export const confirmNGODelivery = async (donationId, data, photo) => {
+  try {
+    console.log('Starting NGO delivery confirmation with:', { donationId, data, photo });
+    const formData = new FormData();
+    
+    // Add photo if provided
+    if (photo) {
+      console.log('Processing delivery photo...');
+      if (photo instanceof Blob) {
+        const fileName = `delivery-${Date.now()}.jpg`;
+        formData.append('deliveryPhoto', photo, fileName);
+      } else if (typeof photo === 'string') {
+        const response = await fetch(photo);
+        const blob = await response.blob();
+        const fileName = `delivery-${Date.now()}.jpg`;
+        formData.append('deliveryPhoto', blob, fileName);
+      }
+    }
+    
+    // Add other form data
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, value);
+      }
+    });
+
+    const response = await api.post(
+      `/donations/${donationId}/ngo-deliver`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    
+    console.log('NGO delivery confirmed:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error in confirmNGODelivery:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
     });
     throw error;
   }

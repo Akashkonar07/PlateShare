@@ -81,16 +81,62 @@ router.post(
   donationController.acceptDonation
 );
 
-// Volunteer/NGO confirms pickup
+// Volunteer confirms pickup
 router.post(
   "/:donationId/pickup",
   authenticate,
-  authorize(["Volunteer", "NGO"]),
+  authorize(["Volunteer"]),
   upload.single('photo'),
   donationController.confirmPickup
 );
 
-// Delivery confirmation (Volunteer marks delivery as complete)
+// NGO confirms pickup (no photo required)
+router.post(
+  "/:donationId/ngo-pickup",
+  authenticate,
+  authorize(["NGO"]),
+  donationController.confirmNGOPickup
+);
+
+// NGO confirms delivery with photo and recipient details
+router.post(
+  "/:donationId/ngo-deliver",
+  authenticate,
+  authorize(["NGO"]),
+  upload.single('deliveryPhoto'),
+  donationController.confirmNGODelivery
+);
+
+// NGO confirms delivery with photo and details
+router.post(
+  "/:donationId/ngo-deliver",
+  authenticate,
+  authorize(["NGO"]),
+  upload.single('deliveryPhoto'),
+  (req, res, next) => {
+    // Validate required fields
+    const { recipientName, recipientType } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Delivery photo is required' 
+      });
+    }
+    
+    if (!recipientName || !recipientType) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Recipient name and type are required' 
+      });
+    }
+    
+    next();
+  },
+  donationController.confirmNGODelivery
+);
+
+// Delivery confirmation (Volunteer/NGO marks delivery as complete)
 router.post(
   "/:id/deliver",
   (req, res, next) => {
@@ -101,7 +147,7 @@ router.post(
     next();
   },
   authenticate,
-  authorize(["Volunteer"]),
+  authorize(["Volunteer", "NGO"]),
   upload.single("deliveryPhoto"),
   (req, res, next) => {
     console.log('After file upload middleware');
@@ -112,6 +158,23 @@ router.post(
       size: req.file.size,
       buffer: req.file.buffer ? `Buffer of ${req.file.buffer.length} bytes` : 'No buffer'
     } : 'No file uploaded');
+    
+    // Validate required fields
+    const { recipientName, recipientType, recipientContact, numberOfPeopleServed } = req.body;
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Delivery photo is required' 
+      });
+    }
+    
+    if (!recipientName || !recipientType) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Recipient name and type are required' 
+      });
+    }
+    
     next();
   },
   async (req, res, next) => {
