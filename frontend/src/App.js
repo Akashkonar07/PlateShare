@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
-import Chatbot from "./components/Chatbot";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -24,45 +23,40 @@ const PrivateRoute = ({ children, roles }) => {
 
 function App() {
   return (
-    <div className="App">
-      <AuthProvider>
-        <Navbar />
-        <div className="main-content">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route
-              path="/donor"
-              element={
-                <PrivateRoute roles={["donor"]}>
-                  <DonorDashboard />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/volunteer"
-              element={
-                <PrivateRoute roles={["volunteer"]}>
-                  <VolunteerDashboard />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/ngo"
-              element={
-                <PrivateRoute roles={["ngo"]}>
-                  <NGODashboard />
-                </PrivateRoute>
-              }
-            />
-            {/* Catch all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-        <Chatbot />
-      </AuthProvider>
-    </div>
+    <AuthProvider>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/donor"
+          element={
+            <PrivateRoute roles={["donor"]}>
+              <DonorDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/volunteer"
+          element={
+            <PrivateRoute roles={["volunteer"]}>
+              <VolunteerDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/ngo"
+          element={
+            <PrivateRoute roles={["ngo"]}>
+              <NGODashboard />
+            </PrivateRoute>
+          }
+        />
+        {/* Catch all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
 

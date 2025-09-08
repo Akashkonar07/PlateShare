@@ -42,7 +42,6 @@ const ngoRoutes = require("./routes/ngos");
 const reportRoutes = require("./routes/reports");
 const mlRoutes = require("./routes/ml");
 const notificationRoutes = require("./routes/notifications");
-const chatbotRoutes = require("./routes/chatbot");
 
 // ===== Debug: Ensure routers are valid =====
 [
@@ -52,8 +51,7 @@ const chatbotRoutes = require("./routes/chatbot");
   { name: "ngoRoutes", router: ngoRoutes },
   { name: "reportRoutes", router: reportRoutes },
   { name: "mlRoutes", router: mlRoutes },
-  { name: "notificationRoutes", router: notificationRoutes },
-  { name: "chatbotRoutes", router: chatbotRoutes }
+  { name: "notificationRoutes", router: notificationRoutes }
 ].forEach(({ name, router }) => {
   if (!router || typeof router !== "function") {
     console.error(`❌ ${name} is invalid:`, router);
@@ -70,7 +68,6 @@ app.use("/api/ngos", ngoRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/ml", mlRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/chatbot", chatbotRoutes);
 
 // ===== Test Route =====
 app.get("/", (req, res) => res.send("PlateShare API running..."));
