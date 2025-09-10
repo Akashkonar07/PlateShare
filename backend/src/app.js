@@ -25,9 +25,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== Multer Setup (for file uploads) =====
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+// Multer configuration has been moved to individual route files
 
 // ===== MongoDB Connection =====
 mongoose.connect(process.env.MONGO_URI) // modern default options

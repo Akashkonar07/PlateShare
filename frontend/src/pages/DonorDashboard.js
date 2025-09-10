@@ -128,13 +128,36 @@ const DonorDashboard = () => {
       
       // Handle photo upload if available
       if (capturedPhoto) {
+        let fileToUpload;
+        
         // If it's a Blob (from camera), convert to File
         if (capturedPhoto instanceof Blob) {
-          const file = new File([capturedPhoto], 'donation-photo.jpg', { type: 'image/jpeg' });
-          formDataToSend.append('photo', file);
+          fileToUpload = new File([capturedPhoto], 'donation-photo.jpg', { 
+            type: 'image/jpeg',
+            lastModified: new Date().getTime()
+          });
         } else if (capturedPhoto instanceof File) {
-          formDataToSend.append('photo', capturedPhoto);
+          fileToUpload = capturedPhoto;
+        } else {
+          // Handle case where capturedPhoto is a base64 string
+          const response = await fetch(capturedPhoto);
+          const blob = await response.blob();
+          fileToUpload = new File([blob], 'donation-photo.jpg', { 
+            type: 'image/jpeg',
+            lastModified: new Date().getTime()
+          });
         }
+        
+        // Ensure the field name matches what multer expects
+        formDataToSend.append('photo', fileToUpload);
+        
+        // Log the file details for debugging
+        console.log('Appending file:', {
+          name: fileToUpload.name,
+          type: fileToUpload.type,
+          size: fileToUpload.size,
+          fieldName: 'photo'
+        });
       }
 
       const response = await createDonation(formDataToSend);

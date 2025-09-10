@@ -11,10 +11,12 @@ import {
 const NGODashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState("available");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [donations, setDonations] = useState([]);
   const [assignedDonations, setAssignedDonations] = useState([]);
   const [completedDonations, setCompletedDonations] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedDonations, setSelectedDonations] = useState([]);
   const [filterQuantity, setFilterQuantity] = useState("all");
   const [showPickupModal, setShowPickupModal] = useState(false);
@@ -36,9 +38,22 @@ const NGODashboard = () => {
     }
   }, [user]);
 
-  const fetchAllDonations = async () => {
+  const fetchAllDonations = async (retryCount = 0) => {
+    // Don't try to fetch if we're offline and not retrying
+    if (retryCount === 0 && !navigator.onLine) {
+      setError({
+        message: 'You appear to be offline. Please check your internet connection.',
+        isOffline: true,
+        retry: () => fetchAllDonations(0)
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+      
       const response = await fetchDonations();
       
       const allDonations = Array.isArray(response.donations) ? response.donations : [];
@@ -70,8 +85,31 @@ const NGODashboard = () => {
       setDonations(availableDonations);
       setAssignedDonations(assigned);
       setCompletedDonations(completed);
+      setLastUpdated(new Date());
+      setError(null); // Clear any previous errors
     } catch (error) {
-      console.error("Error fetching donations:", error);
+      console.error("Error in fetchAllDonations:", {
+        message: error.message,
+        code: error.code,
+        isNetworkError: error.isNetworkError,
+        isOffline: error.isOffline,
+        retryCount
+      });
+      
+      // Don't retry if we're offline or if we've exceeded max retries
+      if (error.isOffline || retryCount >= 2) {
+        setError({
+          message: error.message || 'Failed to load donations. Please try again later.',
+          isNetworkError: error.isNetworkError,
+          isOffline: error.isOffline,
+          retry: () => fetchAllDonations(0) // Reset retry count
+        });
+      } else {
+        // Auto-retry after a delay with exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
+        console.log(`Retrying in ${delay}ms... (${retryCount + 1}/2)`);
+        setTimeout(() => fetchAllDonations(retryCount + 1), delay);
+      }
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,7 @@ const { authenticate, authorize } = require("../middleware/auth");
 const donationController = require("../controllers/donationController");
 const multer = require("multer");
 
-// Setup multer for file uploads
+// Initialize multer with memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
@@ -103,37 +103,194 @@ router.post(
   "/:donationId/ngo-deliver",
   authenticate,
   authorize(["NGO"]),
-  upload.single('deliveryPhoto'),
-  donationController.confirmNGODelivery
-);
-
-// NGO confirms delivery with photo and details
-router.post(
-  "/:donationId/ngo-deliver",
-  authenticate,
-  authorize(["NGO"]),
-  upload.single('deliveryPhoto'),
   (req, res, next) => {
-    // Validate required fields
-    const { recipientName, recipientType } = req.body;
+    console.log('Processing NGO delivery request...');
     
-    if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Delivery photo is required' 
+    // Log request info for debugging
+    console.log('Request info:', {
+      method: req.method,
+      url: req.originalUrl,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      hasBody: !!req.body,
+      hasFiles: !!req.files,
+      bodyFields: req.body ? Object.keys(req.body) : []
+    });
+    
+    // Create a custom error handler for multer
+    const handleMulterError = (err) => {
+      console.error('Multer error:', {
+        message: err.message,
+        code: err.code,
+        field: err.field,
+        storageErrors: err.storageErrors,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
       });
-    }
-    
-    if (!recipientName || !recipientType) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Recipient name and type are required' 
+      
+      let errorMessage = 'Error processing file upload';
+      let statusCode = 400;
+      
+      switch (err.code) {
+        case 'LIMIT_FILE_SIZE':
+          errorMessage = 'File size too large. Maximum size is 10MB.';
+          statusCode = 413; // Payload Too Large
+          break;
+        case 'LIMIT_UNEXPECTED_FILE':
+          errorMessage = `Unexpected file field. Expected file field named 'deliveryPhoto' but got '${err.field}'`;
+          break;
+        case 'LIMIT_FILE_COUNT':
+          errorMessage = 'Too many files uploaded. Only one file is allowed.';
+          break;
+        case 'LIMIT_FIELD_KEY':
+          errorMessage = 'Field name too long';
+          break;
+        case 'LIMIT_FIELD_VALUE':
+          errorMessage = 'Field value too long';
+          break;
+        case 'LIMIT_FIELD_COUNT':
+          errorMessage = 'Too many fields';
+          break;
+        case 'LIMIT_PART_COUNT':
+          errorMessage = 'Too many parts in the multipart request';
+          break;
+        default:
+          if (err.message.includes('image')) {
+            errorMessage = 'Only image files are allowed (JPG, JPEG, PNG)';
+          }
+      }
+      
+      return res.status(statusCode).json({
+        success: false,
+        message: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+        code: err.code
       });
-    }
+    };
     
-    next();
+    // Use multer to handle the file upload
+    const multerUpload = upload.single('deliveryPhoto');
+    
+    multerUpload(req, res, function(err) {
+      if (err) {
+        return handleMulterError(err);
+      }
+      
+      // Log upload result
+      console.log('File upload result:', {
+        file: req.file ? {
+          fieldname: req.file.fieldname,
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          destination: req.file.destination,
+          filename: req.file.filename,
+          path: req.file.path
+        } : null,
+        body: req.body ? {
+          ...req.body,
+          // Don't log sensitive data
+          password: req.body.password ? '***' : undefined
+        } : null
+      });
+      
+      // Validate required fields
+      const { recipientName, recipientType } = req.body;
+      
+      // Check if file was uploaded
+      if (!req.file) {
+        console.error('No file uploaded with request');
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Delivery photo is required',
+          code: 'MISSING_FILE'
+        });
+      }
+      
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        // Clean up the uploaded file
+        require('fs').unlink(req.file.path, (unlinkErr) => {
+          if (unlinkErr) console.error('Error cleaning up invalid file:', unlinkErr);
+        });
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid file type. Only JPG, JPEG, and PNG images are allowed.',
+          code: 'INVALID_FILE_TYPE'
+        });
+      }
+      
+      // Validate required fields
+      if (!recipientName || !recipientType) {
+        // Clean up the uploaded file since validation failed
+        require('fs').unlink(req.file.path, (unlinkErr) => {
+          if (unlinkErr) console.error('Error cleaning up file after validation failed:', unlinkErr);
+        });
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Recipient name and type are required',
+          code: 'MISSING_REQUIRED_FIELDS',
+          required: ['recipientName', 'recipientType']
+        });
+      }
+      
+      // Add additional validation for recipientType if needed
+      const validRecipientTypes = ['Individual', 'Organization', 'Shelter', 'Other'];
+      if (!validRecipientTypes.includes(recipientType)) {
+        // Clean up the uploaded file since validation failed
+        require('fs').unlink(req.file.path, (unlinkErr) => {
+          if (unlinkErr) console.error('Error cleaning up file after validation failed:', unlinkErr);
+        });
+        
+        return res.status(400).json({
+          success: false,
+          message: `Invalid recipient type. Must be one of: ${validRecipientTypes.join(', ')}`,
+          code: 'INVALID_RECIPIENT_TYPE',
+          validTypes: validRecipientTypes
+        });
+      }
+      
+      // All validations passed, proceed to controller
+      next();
+    });
   },
-  donationController.confirmNGODelivery
+  async (req, res, next) => {
+    try {
+      console.log('Processing NGO delivery in controller...');
+      await donationController.confirmNGODelivery(req, res, next);
+    } catch (error) {
+      console.error('Error in NGO delivery confirmation route:', {
+        message: error.message,
+        stack: error.stack,
+        requestBody: req.body,
+        file: req.file ? {
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype,
+          bufferLength: req.file.buffer?.length
+        } : 'No file',
+        error: {
+          ...error,
+          name: error.name,
+          code: error.code,
+          statusCode: error.statusCode
+        }
+      });
+      
+      const statusCode = error.statusCode || 500;
+      const errorMessage = statusCode === 500 
+        ? 'Internal server error during NGO delivery confirmation'
+        : error.message;
+      
+      res.status(statusCode).json({
+        success: false,
+        message: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
 );
 
 // Delivery confirmation (Volunteer/NGO marks delivery as complete)

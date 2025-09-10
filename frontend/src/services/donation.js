@@ -9,22 +9,77 @@ export const createDonation = async (donationData) => {
   return response.data;
 };
 
-export const fetchDonations = async () => {
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000; // 1 second
+
+// Check if browser is online
+const isOnline = () => {
+  return typeof navigator !== 'undefined' && navigator.onLine;
+};
+
+export const fetchDonations = async (retryCount = 0) => {
+  // Check if we're offline before making the request
+  if (!isOnline()) {
+    const error = new Error('You appear to be offline. Please check your internet connection.');
+    error.isOffline = true;
+    error.isNetworkError = true;
+    throw error;
+  }
+
   try {
     const token = localStorage.getItem('token');
     console.log('Fetching donations with token:', token ? 'Token exists' : 'No token found');
     
-    const response = await api.get('/donations');
+    const response = await api.get('/donations', {
+      timeout: 10000, // 10 seconds timeout
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      validateStatus: (status) => status < 500 // Don't throw for 4xx errors
+    });
+    
+    // Handle 4xx errors
+    if (response.status >= 400) {
+      const error = new Error(response.data?.message || `Request failed with status ${response.status}`);
+      error.status = response.status;
+      error.response = response;
+      throw error;
+    }
+    
     console.log('Donations fetched successfully');
     return response.data;
   } catch (error) {
-    console.error('Error fetching donations:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      headers: error.response?.headers
-    });
-    throw error;
+    // If it's a network error and we haven't exceeded max retries, retry
+    if ((!error.response || error.code === 'ECONNABORTED') && retryCount < MAX_RETRIES) {
+      console.log(`Retrying fetch (${retryCount + 1}/${MAX_RETRIES})...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+      return fetchDonations(retryCount + 1);
+    }
+    
+    // Create a more user-friendly error
+    let errorMessage = 'An unexpected error occurred';
+    
+    if (error.isOffline) {
+      errorMessage = 'You appear to be offline. Please check your internet connection.';
+    } else if (error.response) {
+      // Handle HTTP error responses
+      errorMessage = error.response.data?.message || `Request failed with status ${error.response.status}`;
+    } else if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Request timed out. Please check your internet connection and try again.';
+    } else if (error.code === 'ERR_NETWORK') {
+      errorMessage = 'Network error. Please check your internet connection and try again.';
+    }
+    
+    const enhancedError = new Error(errorMessage);
+    enhancedError.isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED';
+    enhancedError.isOffline = error.isOffline || !isOnline();
+    enhancedError.response = error.response;
+    enhancedError.code = error.code;
+    
+    console.error('Enhanced error:', enhancedError);
+    throw enhancedError;
   }
 };
 
@@ -187,9 +242,11 @@ export const confirmNGOPickup = async (donationId, photo) => {
     if (photo) {
       console.log('Processing pickup photo...');
       if (photo instanceof Blob) {
-        const fileName = `pickup-${Date.now()}.jpg`;
-        formData.append('pickupPhoto', photo, fileName);
-      } else if (typeof photo === 'string') {
+        const file = new File([photo], 'delivery-photo.jpg', { type: 'image/jpeg' });
+        formData.append('deliveryPhoto', file);
+      } else if (photo instanceof File) {
+        formData.append('deliveryPhoto', photo);
+      } else {
         const response = await fetch(photo);
         const blob = await response.blob();
         const fileName = `pickup-${Date.now()}.jpg`;
@@ -220,38 +277,116 @@ export const confirmNGOPickup = async (donationId, photo) => {
 };
 
 export const confirmNGODelivery = async (donationId, data, photo) => {
+  // First validate required fields before processing the photo
+  if (!data || !data.recipientName || !data.recipientType) {
+    throw new Error('Recipient name and type are required');
+  }
+
   try {
-    console.log('Starting NGO delivery confirmation with:', { donationId, data, photo });
+    console.log('Starting NGO delivery confirmation with:', { 
+      donationId, 
+      hasPhoto: !!photo,
+      data: { ...data } // Log a copy to avoid potential side effects
+    });
+    
     const formData = new FormData();
     
     // Add photo if provided
     if (photo) {
       console.log('Processing delivery photo...');
-      if (photo instanceof Blob) {
-        const fileName = `delivery-${Date.now()}.jpg`;
-        formData.append('deliveryPhoto', photo, fileName);
-      } else if (typeof photo === 'string') {
-        const response = await fetch(photo);
-        const blob = await response.blob();
-        const fileName = `delivery-${Date.now()}.jpg`;
-        formData.append('deliveryPhoto', blob, fileName);
+      try {
+        let fileToUpload;
+        
+        if (photo instanceof Blob) {
+          // Ensure we have a proper File object with correct MIME type
+          fileToUpload = new File([photo], `delivery-${Date.now()}.jpg`, { 
+            type: photo.type || 'image/jpeg',
+            lastModified: new Date().getTime()
+          });
+        } else if (typeof photo === 'string') {
+          // Handle base64 or URL
+          const response = await fetch(photo);
+          if (!response.ok) throw new Error(`Failed to fetch photo: ${response.status} ${response.statusText}`);
+          const blob = await response.blob();
+          fileToUpload = new File([blob], `delivery-${Date.now()}.jpg`, {
+            type: blob.type || 'image/jpeg',
+            lastModified: new Date().getTime()
+          });
+        } else if (photo instanceof File) {
+          fileToUpload = photo;
+        }
+        
+        if (fileToUpload) {
+          // Ensure the field name matches exactly what Multer expects
+          formData.append('deliveryPhoto', fileToUpload);
+          
+          // Log file info for debugging
+          console.log('Added file to form data:', {
+            fieldName: 'deliveryPhoto',
+            fileName: fileToUpload.name,
+            fileType: fileToUpload.type,
+            fileSize: fileToUpload.size,
+            isFile: fileToUpload instanceof File,
+            isBlob: fileToUpload instanceof Blob
+          });
+        } else {
+          throw new Error('Could not process the provided photo');
+        }
+      } catch (photoError) {
+        console.error('Error processing photo:', {
+          message: photoError.message,
+          stack: photoError.stack,
+          photoType: typeof photo,
+          isFile: photo instanceof File,
+          isBlob: photo instanceof Blob
+        });
+        throw new Error('Failed to process delivery photo: ' + photoError.message);
       }
+    } else {
+      console.warn('No photo provided for delivery confirmation');
+      throw new Error('Delivery photo is required');
     }
     
     // Add other form data
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        formData.append(key, value);
-      }
-    });
+    if (data) {
+      console.log('Adding form data:', data);
+      // Explicitly append each field to ensure consistent field names
+      const formFields = {
+        recipientName: data.recipientName,
+        recipientType: data.recipientType,
+        recipientContact: data.recipientContact || '',
+        numberOfPeopleServed: data.numberOfPeopleServed || 1,
+        notes: data.notes || ''
+      };
+      
+      Object.entries(formFields).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+    }
 
+    // Log form data for debugging (without logging the actual file content)
+    console.log('FormData entries:');
+    for (let [key, value] of formData.entries()) {
+      console.log(key, value instanceof File ? 
+        `${value.name} (${value.size} bytes, ${value.type})` : 
+        value
+      );
+    }
+
+    console.log('Sending NGO delivery confirmation to server...');
     const response = await api.post(
       `/donations/${donationId}/ngo-deliver`,
       formData,
       {
         headers: {
+          // Let the browser set the Content-Type with the correct boundary
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000, // Increased timeout to 60 seconds
+        maxBodyLength: Infinity, // Required for large file uploads
+        maxContentLength: Infinity // Required for large file uploads
       }
     );
     
@@ -261,9 +396,18 @@ export const confirmNGODelivery = async (donationId, data, photo) => {
     console.error('Error in confirmNGODelivery:', {
       message: error.message,
       response: error.response?.data,
-      status: error.response?.status
+      status: error.response?.status,
+      stack: error.stack
     });
-    throw error;
+    
+    // Create a more user-friendly error message
+    const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to confirm delivery. Please try again.';
+    
+    const enhancedError = new Error(errorMessage);
+    enhancedError.response = error.response;
+    throw enhancedError;
   }
 };
 
