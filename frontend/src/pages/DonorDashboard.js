@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import useGeoLocation from "../hooks/useGeoLocation";
 import { createDonation, getMyDonations } from "../services/donation";
 import PhotoCapture from "../components/PhotoCapture";
+import UserProfile from "../components/UserProfile";
 
 const DonorDashboard = () => {
   const { user, logout } = useAuth();
@@ -232,13 +233,25 @@ const DonorDashboard = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Donor Dashboard</h1>
             <p className="text-gray-600">Welcome back, {user.name}!</p>
+            {user.profile?.phone && (
+              <p className="text-sm text-gray-500"> {user.profile.phone}</p>
+            )}
+            {user.profile?.address?.city && (
+              <p className="text-sm text-gray-500"> {user.profile.address.city}, {user.profile.address.state}</p>
+            )}
           </div>
-          <button
-            onClick={logout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            Logout
-          </button>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Total Points</div>
+              <div className="text-2xl font-bold text-green-600">{user.points || 0}</div>
+            </div>
+            <button
+              onClick={logout}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -265,6 +278,16 @@ const DonorDashboard = () => {
               }`}
             >
               My Donations
+            </button>
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "profile"
+                  ? "border-green-500 text-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Profile
             </button>
           </nav>
         </div>
@@ -519,6 +542,12 @@ const DonorDashboard = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === "profile" && (
+            <div>
+              <UserProfile />
             </div>
           )}
         </div>

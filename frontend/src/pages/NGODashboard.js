@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { 
   fetchDonations, 
+  getAssignedDonations,
   confirmNGODonation, 
   updateDonationStatus,
   confirmNGOPickup,
   confirmNGODelivery
 } from "../services/donation";
+import UserProfile from "../components/UserProfile";
 
 const NGODashboard = () => {
   const { user, logout } = useAuth();
@@ -34,7 +36,12 @@ const NGODashboard = () => {
 
   useEffect(() => {
     if (user) {
-      fetchAllDonations();
+      // Add a small delay to prevent race conditions with token storage
+      const timer = setTimeout(() => {
+        fetchAllDonations();
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
   }, [user]);
 
@@ -50,31 +57,33 @@ const NGODashboard = () => {
       return;
     }
 
+    if (!user) return;
+        
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetchDonations();
+      // Fetch all donations for bulk donations view
+      const allResponse = await fetchDonations();
+      const allDonations = allResponse.donations || [];
       
-      const allDonations = Array.isArray(response.donations) ? response.donations : [];
-      console.log('Fetched donations:', allDonations);
+      // Fetch assigned donations separately
+      const assignedResponse = await getAssignedDonations();
+      const assignedDonations = assignedResponse.donations || [];
       
-      // Filter donations for NGO dashboard
+      // Filter donations for NGO view
       const availableDonations = allDonations.filter(d => 
         (d.status === "Pending" || d.status === "Assigned") && 
         d.quantity >= 10 && // NGOs handle bulk donations (10+ servings)
         (!d.assignedTo || d.assignedTo._id === user.id) // Either unassigned or assigned to this NGO
       );
       
-      const assigned = allDonations.filter(d => 
-        d.assignedTo && 
-        d.assignedTo._id === user.id && 
+      // Use assigned donations from dedicated endpoint
+      const assigned = assignedDonations.filter(d => 
         ["Assigned", "PickedUp"].includes(d.status)
       );
       
-      const completed = allDonations.filter(d => 
-        d.assignedTo && 
-        d.assignedTo._id === user.id && 
+      const completed = assignedDonations.filter(d => 
         d.status === "Delivered"
       );
       
@@ -96,20 +105,23 @@ const NGODashboard = () => {
         retryCount
       });
       
-      // Don't retry if we're offline or if we've exceeded max retries
-      if (error.isOffline || retryCount >= 2) {
-        setError({
-          message: error.message || 'Failed to load donations. Please try again later.',
-          isNetworkError: error.isNetworkError,
-          isOffline: error.isOffline,
-          retry: () => fetchAllDonations(0) // Reset retry count
-        });
-      } else {
-        // Auto-retry after a delay with exponential backoff
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
-        console.log(`Retrying in ${delay}ms... (${retryCount + 1}/2)`);
-        setTimeout(() => fetchAllDonations(retryCount + 1), delay);
+      let errorMessage = 'Failed to fetch donations';
+      if (error.isOffline) {
+        errorMessage = 'You appear to be offline. Please check your internet connection.';
+      } else if (error.response?.status === 400) {
+        errorMessage = 'Authentication error. Please try logging in again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again.';
+      } else if (error.isNetworkError) {
+        errorMessage = 'Network error. Please check your connection and try again.';
       }
+      
+      setError({
+        message: errorMessage,
+        isNetworkError: error.isNetworkError,
+        isOffline: error.isOffline,
+        retry: () => fetchAllDonations(retryCount + 1)
+      });
     } finally {
       setLoading(false);
     }
@@ -388,11 +400,21 @@ const NGODashboard = () => {
               onClick={() => setActiveTab("completed")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === "completed"
-                  ? "border-blue-500 text-blue-600"
+                  ? "border-green-500 text-green-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
               Completed ({completedDonations.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "profile"
+                  ? "border-green-500 text-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Profile
             </button>
           </nav>
         </div>
@@ -640,6 +662,12 @@ const NGODashboard = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === "profile" && (
+            <div>
+              <UserProfile />
             </div>
           )}
         </div>

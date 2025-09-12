@@ -4,7 +4,7 @@ import { loginUser } from "../services/auth";
 import { useAuth } from "../hooks/useAuth";
 
 const Login = () => {
-  const { setUser } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({ email: "", password: "" });
@@ -19,8 +19,11 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await loginUser({ email: form.email, password: form.password });
-      localStorage.setItem("token", response.data.token);
-      setUser(response.data.user);
+      
+      // Use the enhanced login function from AuthContext
+      login(response.data.user, response.data.token);
+      
+      console.log('User logged in with complete profile:', response.data.user);
       navigate(`/${response.data.user.role.toLowerCase()}`);
     } catch (err) {
       console.error("Login Error:", err);

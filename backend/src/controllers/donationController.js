@@ -604,17 +604,20 @@ exports.confirmNGODelivery = async (req, res) => {
 // ===== Get Assigned Donations for Volunteer/NGO =====
 exports.getAssignedDonations = async (req, res) => {
   try {
-    const query = {
-      assignedTo: req.user._id,
-      status: { $in: ["Assigned", "PickedUp", "Accepted"] },
-    };
+    let query;
 
-    // For NGOs, also include donations they've been assigned to but not yet accepted
     if (req.user.role === 'NGO') {
-      query.$or = [
-        { status: { $in: ["Assigned", "PickedUp"] } },
-        { status: "Accepted", assignedTo: req.user._id }
-      ];
+      // For NGOs, get donations assigned to them with status Assigned, PickedUp, or Delivered
+      query = {
+        assignedTo: req.user._id,
+        status: { $in: ["Assigned", "PickedUp", "Delivered"] }
+      };
+    } else {
+      // For Volunteers, get donations assigned to them with various statuses including Delivered
+      query = {
+        assignedTo: req.user._id,
+        status: { $in: ["Assigned", "PickedUp", "Accepted", "Delivered"] }
+      };
     }
 
     const donations = await Donation.find(query)

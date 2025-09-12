@@ -4,7 +4,7 @@ import { signupUser } from "../services/auth";
 import { useAuth } from "../hooks/useAuth";
 
 const Signup = () => {
-  const { setUser } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
@@ -36,10 +36,10 @@ const Signup = () => {
       const signupResponse = await signupUser(payload);
       console.log("Signup response:", signupResponse.data);
       
-      // Store token and user from signup response
-      localStorage.setItem("token", signupResponse.data.token);
-      setUser(signupResponse.data.user);
+      // Use the enhanced login function from AuthContext
+      login(signupResponse.data.user, signupResponse.data.token);
       
+      console.log('User signed up with complete profile:', signupResponse.data.user);
       const redirectPath = `/${signupResponse.data.user.role.toLowerCase()}`;
       console.log("Redirecting to:", redirectPath);
       navigate(redirectPath);

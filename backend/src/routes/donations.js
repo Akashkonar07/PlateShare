@@ -34,9 +34,17 @@ assertFunction(authorize(["Donor"]), "authorize(['Donor'])");
 assertFunction(donationController.createDonation, "donationController.createDonation");
 assertFunction(donationController.getMyDonations, "donationController.getMyDonations");
 assertFunction(donationController.getAssignedDonations, "donationController.getAssignedDonations");
+assertFunction(donationController.getAllDonations, "donationController.getAllDonations");
 assertFunction(donationController.acceptDonation, "donationController.acceptDonation");
+assertFunction(donationController.confirmPickup, "donationController.confirmPickup");
+assertFunction(donationController.confirmNGOPickup, "donationController.confirmNGOPickup");
 assertFunction(donationController.confirmDelivery, "donationController.confirmDelivery");
+assertFunction(donationController.confirmNGODelivery, "donationController.confirmNGODelivery");
 assertFunction(donationController.declineDonation, "donationController.declineDonation");
+assertFunction(donationController.getDonationTracking, "donationController.getDonationTracking");
+assertFunction(donationController.updateDonationStatus, "donationController.updateDonationStatus");
+assertFunction(donationController.confirmAssignment, "donationController.confirmAssignment");
+assertFunction(donationController.assignToNGO, "donationController.assignToNGO");
 
 // --- Routes ---
 

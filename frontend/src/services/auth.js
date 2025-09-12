@@ -22,10 +22,28 @@ export const loginUser = async (userData) => {
   return authAPI.post("/login", userData);
 };
 
-
 // Get user profile (requires auth token)
 export const getUserProfile = async (token) => {
   return authAPI.get("/profile", {
     headers: { Authorization: `Bearer ${token}` },
   });
+};
+
+// Update user profile (requires auth token)
+export const updateUserProfile = async (profileData, token) => {
+  console.log("Updating user profile:", profileData);
+  return authAPI.put("/profile", profileData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+// Helper function to get auth headers
+export const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+// Helper function to check if user is authenticated
+export const isAuthenticated = () => {
+  return !!localStorage.getItem('token');
 };
