@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { fetchDonations, getAssignedDonations, acceptDonation, confirmPickup, confirmDelivery } from "../services/donation";
 import VolunteerStats from "../components/VolunteerStats";
 import Leaderboard from "../components/Leaderboard";
+import "./VolunteerDashboard.css";
 
 const VolunteerDashboard = () => {
   const { user, logout } = useAuth();
@@ -18,6 +19,12 @@ const VolunteerDashboard = () => {
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [currentDonation, setCurrentDonation] = useState(null);
   const [pickupPhoto, setPickupPhoto] = useState(null);
+
+  // Leaderboard state
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState('all');
+  const [userPosition, setUserPosition] = useState(null);
 
   const token = localStorage.getItem("token");
 
@@ -121,6 +128,100 @@ const VolunteerDashboard = () => {
       return () => clearTimeout(timer);
     }
   }, [user]);
+
+  const fetchLeaderboardData = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLoadingLeaderboard(true);
+      
+      // Map frontend period to backend type
+      const periodMap = {
+        'alltime': 'alltime',
+        'month': 'monthly', 
+        'week': 'weekly'
+      };
+      
+      const type = periodMap[leaderboardPeriod] || 'alltime';
+      
+      const response = await api.get(`/volunteers/leaderboard?type=${type}&limit=20`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data && response.data.success) {
+        const leaderboardData = Array.isArray(response.data.leaderboard) ? response.data.leaderboard : [];
+        
+        // Transform backend data to match frontend format
+        const transformedData = leaderboardData.map((volunteer, index) => ({
+          _id: volunteer.user._id,
+          name: volunteer.user.name,
+          totalDeliveries: volunteer.stats?.totalDeliveries || 0,
+          totalServings: volunteer.stats?.totalServingsDelivered || 0,
+          peopleHelped: Math.floor((volunteer.stats?.totalServingsDelivered || 0) * 0.8), // Estimate based on servings
+          score: volunteer.totalPoints || 0
+        }));
+        
+        setLeaderboardData(transformedData);
+        
+        // Check if current user is in leaderboard
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          const currentUser = JSON.parse(userData);
+          const userInLeaderboard = transformedData.find(v => v._id === currentUser._id);
+          
+          if (!userInLeaderboard) {
+            // Fetch user's profile to get their stats if not in top 20
+            try {
+              const profileResponse = await api.get('/volunteers/profile', {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              
+              if (profileResponse.data && profileResponse.data.success && profileResponse.data.profile) {
+                const profile = profileResponse.data.profile;
+                const userPoints = {
+                  alltime: profile.totalPoints || 0,
+                  monthly: profile.monthlyPoints || 0,
+                  weekly: profile.weeklyPoints || 0
+                };
+                
+                // Estimate user's rank (they're not in top 20)
+                const estimatedRank = Math.max(21, transformedData.length + 1);
+                
+                setUserPosition({
+                  rank: estimatedRank,
+                  totalDeliveries: profile.stats?.totalDeliveries || 0,
+                  totalServings: profile.stats?.totalServingsDelivered || 0,
+                  peopleHelped: Math.floor((profile.stats?.totalServingsDelivered || 0) * 0.8),
+                  score: userPoints[type] || 0
+                });
+              }
+            } catch (profileError) {
+              console.error('Error fetching user profile:', profileError);
+            }
+          } else {
+            // User is in leaderboard, clear user position
+            setUserPosition(null);
+          }
+        }
+      } else {
+        console.error('Unexpected response format:', response.data);
+        setLeaderboardData([]);
+        setUserPosition(null);
+      }
+    } catch (err) {
+      console.error("Error fetching leaderboard data:", err);
+      setError('Failed to fetch leaderboard data');
+      setLeaderboardData([]);
+      setUserPosition(null);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  }, [token, leaderboardPeriod]);
+
+  useEffect(() => {
+    if (user && activeTab === 'leaderboard') {
+      fetchLeaderboardData();
+    }
+  }, [user, activeTab, fetchLeaderboardData, leaderboardPeriod]);
 
   const handleAcceptDonation = async (donationId) => {
     if (!token) return;
@@ -238,26 +339,42 @@ const VolunteerDashboard = () => {
     };
 
     return (
-      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-        <h4 className="font-medium mb-3">Delivery Confirmation</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Name *</label>
+      <div className="delivery-form-card">
+        <div className="delivery-form-header">
+          <div className="delivery-form-title-section">
+            <span className="delivery-form-icon">📋</span>
+            <h3 className="delivery-form-title">Delivery Confirmation</h3>
+          </div>
+          <div className="delivery-form-subtitle">
+            Complete the delivery details for {donation.foodType}
+          </div>
+        </div>
+        
+        <div className="delivery-form-grid">
+          <div className="delivery-form-group">
+            <label className="delivery-form-label">
+              <span className="label-icon">👤</span>
+              Recipient Name *
+            </label>
             <input
               type="text"
               value={formData.recipientName}
               onChange={(e) => updateDeliveryForm(donation._id, { recipientName: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="delivery-form-input"
               placeholder="Enter recipient name"
               required
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Type *</label>
+          
+          <div className="delivery-form-group">
+            <label className="delivery-form-label">
+              <span className="label-icon">🏠</span>
+              Recipient Type *
+            </label>
             <select
               value={formData.recipientType}
               onChange={(e) => updateDeliveryForm(donation._id, { recipientType: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="delivery-form-select"
               required
             >
               <option value="individual">Individual</option>
@@ -266,52 +383,81 @@ const VolunteerDashboard = () => {
               <option value="ngo">NGO</option>
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">People Served</label>
+          
+          <div className="delivery-form-group">
+            <label className="delivery-form-label">
+              <span className="label-icon">👥</span>
+              People Served
+            </label>
             <input
               type="number"
               min="1"
               value={formData.numberOfPeopleServed}
               onChange={(e) => updateDeliveryForm(donation._id, { numberOfPeopleServed: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="delivery-form-input"
+              placeholder="Number of people served"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Photo *</label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => handleDeliveryPhoto(e, donation._id)}
-              className="w-full p-2 border rounded"
-              required
-            />
-            {formData.photo && (
-              <p className="text-xs text-green-600 mt-1">Photo ready for upload</p>
-            )}
+          
+          <div className="delivery-form-group">
+            <label className="delivery-form-label">
+              <span className="label-icon">📸</span>
+              Delivery Photo *
+            </label>
+            <div className="photo-upload-container">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => handleDeliveryPhoto(e, donation._id)}
+                className="photo-upload-input"
+                required
+                id={`photo-upload-${donation._id}`}
+              />
+              <label htmlFor={`photo-upload-${donation._id}`} className="photo-upload-label">
+                <span className="photo-upload-icon">📷</span>
+                <span className="photo-upload-text">
+                  {formData.photo ? "Change Photo" : "Take Photo"}
+                </span>
+              </label>
+              {formData.photo && (
+                <div className="photo-upload-status">
+                  <span className="photo-upload-success-icon">✓</span>
+                  <span className="photo-upload-success-text">Photo ready</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          
+          <div className="delivery-form-group full-width">
+            <label className="delivery-form-label">
+              <span className="label-icon">📝</span>
+              Notes
+            </label>
             <textarea
               value={formData.notes}
               onChange={(e) => updateDeliveryForm(donation._id, { notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows="2"
-              placeholder="Any additional notes about the delivery"
+              className="delivery-form-textarea"
+              rows="3"
+              placeholder="Any additional notes about the delivery..."
             />
           </div>
         </div>
-        <div className="mt-4 flex justify-end space-x-2">
+        
+        <div className="delivery-form-actions">
           <button
             onClick={() => setActiveDonation(null)}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            className="dashboard-button secondary"
           >
+            <span className="button-icon">✖</span>
             Cancel
           </button>
           <button
             onClick={() => handleDeliverySubmit(donation._id)}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+            className="dashboard-button primary"
+            disabled={!formData.recipientName || !formData.photo}
           >
+            <span className="button-icon">✓</span>
             Confirm Delivery
           </button>
         </div>
@@ -333,75 +479,152 @@ const VolunteerDashboard = () => {
     year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
 
-  if (!user) return <div className="max-w-3xl mx-auto mt-20 p-4 bg-white shadow rounded">Please login to access your dashboard.</div>;
+  if (!user) return <div className="auth-check">Please login to access your dashboard.</div>;
 
   return (
-    <div className="max-w-6xl mx-auto mt-20 p-4 space-y-6">
-      {/* Header */}
-      <div className="bg-white shadow rounded-lg p-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Volunteer Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {user.name}!</p>
-          <div className="flex space-x-4 mt-2">
-            <div className="flex items-center"><span className="text-yellow-500">⭐</span><span className="ml-1 font-medium">{user.points || 0} Points</span></div>
-            <div className="flex items-center"><span className="text-green-500">✓</span><span className="ml-1 text-sm text-gray-600">{user.completedDeliveries || 0} Deliveries</span></div>
+    <div className="volunteer-dashboard">
+      {/* Enhanced Header */}
+      <div className="dashboard-card volunteer-header">
+        <div className="user-info">
+          <div className="user-avatar">
+            {user.name ? user.name.charAt(0).toUpperCase() : 'V'}
+            <div className="avatar-ring"></div>
+          </div>
+          <div className="user-details">
+            <div className="dashboard-title-section">
+              <h2 className="dashboard-title">Volunteer Dashboard</h2>
+              <div className="welcome-message">
+                <span className="welcome-text">Welcome back,</span>
+                <span className="user-name">{user.name}!</span>
+              </div>
+            </div>
+            <div className="user-status">
+              <span className="status-badge active">
+                <span className="status-dot"></span>
+                Active
+              </span>
+              <div className="member-info">
+                <span className="member-since">Member since {new Date(user.createdAt || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                <span className="member-separator">•</span>
+                <span className="member-level">Level {user.level || 1} Volunteer</span>
+              </div>
+            </div>
           </div>
         </div>
-        <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">Logout</button>
+        <div className="user-stats enhanced">
+          <div className="stat-item primary">
+            <div className="stat-icon-wrapper">
+              <span className="stat-icon">⭐</span>
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{user.points || 0}</span>
+              <span className="stat-label">Points</span>
+            </div>
+          </div>
+          <div className="stat-item success">
+            <div className="stat-icon-wrapper">
+              <span className="stat-icon">✓</span>
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{user.completedDeliveries || 0}</span>
+              <span className="stat-label">Deliveries</span>
+            </div>
+          </div>
+          <div className="stat-item info">
+            <div className="stat-icon-wrapper">
+              <span className="stat-icon">🍽️</span>
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{user.totalServings || 0}</span>
+              <span className="stat-label">Servings</span>
+            </div>
+          </div>
+          <div className="stat-item warning">
+            <div className="stat-icon-wrapper">
+              <span className="stat-icon">👥</span>
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{user.peopleHelped || 0}</span>
+              <span className="stat-label">People Helped</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8 px-6">
-            {["available", "assignments", "completed", "stats", "leaderboard"].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {tab === "available" && `Available Donations (${donations.length})`}
-                {tab === "assignments" && `My Assignments (${myAssignments.length})`}
-                {tab === "completed" && `Completed Deliveries (${completedDeliveries.length})`}
-                {tab === "stats" && `My Stats & Achievements`}
-                {tab === "leaderboard" && `Leaderboard`}
-              </button>
-            ))}
-          </nav>
+      <div className="dashboard-card">
+        <div className="nav-tabs">
+          {["available", "assignments", "completed", "stats", "leaderboard"].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`nav-tab ${activeTab === tab ? "active" : ""}`}
+            >
+              {tab === "available" && `Available Donations (${donations.length})`}
+              {tab === "assignments" && `My Assignments (${myAssignments.length})`}
+              {tab === "completed" && `Completed Deliveries (${completedDeliveries.length})`}
+              {tab === "stats" && `My Stats & Achievements`}
+              {tab === "leaderboard" && `Leaderboard`}
+            </button>
+          ))}
         </div>
 
-        <div className="p-6">
+        <div className="dashboard-content">
           {activeTab === "available" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Available Donations</h2>
-                <button onClick={fetchAvailableDonations} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">Refresh</button>
+              <div className="section-header">
+                <h2 className="section-title">Available Donations</h2>
+                <button 
+                  onClick={fetchAvailableDonations} 
+                  className="dashboard-button primary"
+                >
+                  Refresh
+                </button>
               </div>
               {loadingDonations ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading donations...</p>
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading donations...</p>
                 </div>
               ) : donations.length === 0 ? (
-                <p className="text-center text-gray-600 py-8">No available donations at the moment.</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">📦</div>
+                  <p className="empty-state-text">No available donations at the moment.</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="donation-grid">
                   {donations.map(donation => (
-                    <div key={donation._id} className="bg-gray-50 rounded-lg p-4 border hover:shadow-md transition-shadow">
-                      {donation.photoUrl && <img src={donation.photoUrl} alt="Food" className="w-full h-48 object-cover rounded-lg mb-4" />}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(donation.status)}`}>{donation.status}</span>
+                    <div key={donation._id} className="donation-card">
+                      <div className="donation-card-header">
+                        <h3 className="donation-card-title">{donation.foodType}</h3>
+                        <span className={`donation-card-status status-${donation.status.toLowerCase()}`}>{donation.status}</span>
+                      </div>
+                      {donation.photoUrl && <img src={donation.photoUrl} alt="Food" className="donation-card-image" />}
+                      <div className="donation-card-content">
+                        <div className="donation-card-detail">
+                          <strong>Quantity:</strong> {donation.quantity} servings
                         </div>
-                        <p className="text-gray-600"><strong>Quantity:</strong> {donation.quantity} servings</p>
-                        <p className="text-gray-600"><strong>Best Before:</strong> {formatDate(donation.bestBefore)}</p>
-                        <p className="text-gray-600"><strong>Donor:</strong> {donation.donor?.name || "Anonymous"}</p>
-                        {donation.location && <p className="text-gray-600"><strong>Location:</strong> {donation.location.latitude.toFixed(4)}, {donation.location.longitude.toFixed(4)}</p>}
-                        <p className="text-gray-500 text-sm">Posted: {formatDate(donation.createdAt)}</p>
-                        <button onClick={() => handleAcceptDonation(donation._id)} className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors mt-4">🤝 Accept Donation</button>
+                        <div className="donation-card-detail">
+                          <strong>Best Before:</strong> {formatDate(donation.bestBefore)}
+                        </div>
+                        {donation.location && (
+                          <div className="donation-card-detail">
+                            <strong>Location:</strong> {donation.location.address || `${donation.location.latitude}, ${donation.location.longitude}`}
+                          </div>
+                        )}
+                        {donation.description && (
+                          <div className="donation-card-detail">
+                            <strong>Description:</strong> {donation.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="donation-card-actions">
+                        <button 
+                          onClick={() => handleAcceptDonation(donation._id)}
+                          className="dashboard-button primary"
+                        >
+                          Accept Donation
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -412,31 +635,83 @@ const VolunteerDashboard = () => {
 
           {activeTab === "assignments" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">My Assignments</h2>
-                <button onClick={fetchMyAssignments} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">Refresh</button>
+              <div className="section-header">
+                <h2 className="section-title">My Assignments</h2>
+                <button 
+                  onClick={fetchMyAssignments} 
+                  className="dashboard-button primary"
+                >
+                  <span className="button-icon">🔄</span>
+                  Refresh
+                </button>
               </div>
               {loadingAssignments ? (
-                <p className="text-center text-gray-600 py-8">Loading assignments...</p>
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading assignments...</p>
+                </div>
               ) : myAssignments.length === 0 ? (
-                <p className="text-center text-gray-600 py-8">No active assignments. Check available donations to help!</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">📋</div>
+                  <p className="empty-state-text">No active assignments. Check available donations to help!</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="assignments-grid">
                   {myAssignments.map(donation => (
-                    <div key={donation._id} className="bg-gray-50 rounded-lg p-4 border">
-                      {donation.photoUrl && <img src={donation.photoUrl} alt="Food" className="w-full h-48 object-cover rounded-lg mb-4" />}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(donation.status)}`}>{donation.status}</span>
+                    <div key={donation._id} className="assignment-card">
+                      <div className="assignment-card-header">
+                        <div className="assignment-title-section">
+                          <h3 className="assignment-card-title">{donation.foodType}</h3>
+                          <div className="assignment-meta">
+                            <span className="assignment-quantity">{donation.quantity} servings</span>
+                            <span className="assignment-separator">•</span>
+                            <span className="assignment-donor">{donation.donor?.name || "Anonymous"}</span>
+                          </div>
                         </div>
-                        <p className="text-gray-600"><strong>Quantity:</strong> {donation.quantity} servings</p>
-                        <p className="text-gray-600"><strong>Best Before:</strong> {formatDate(donation.bestBefore)}</p>
-                        <p className="text-gray-600"><strong>Donor:</strong> {donation.donor?.name || "Anonymous"}</p>
-                        {donation.location && <p className="text-gray-600"><strong>Location:</strong> {donation.location.latitude.toFixed(4)}, {donation.location.longitude.toFixed(4)}</p>}
-
-                        {donation.status === "Assigned" && <button onClick={() => handlePickupComplete(donation._id)} className="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg">📦 Confirm Pickup</button>}
-
+                        <div className="assignment-status-section">
+                          <span className={`assignment-status status-${donation.status.toLowerCase()}`}>
+                            <span className="status-icon">{donation.status === "Assigned" ? "📦" : "🚚"}</span>
+                            {donation.status}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="assignment-card-content">
+                        <div className="assignment-details-grid">
+                          <div className="assignment-detail-item">
+                            <span className="detail-icon">⏰</span>
+                            <div className="detail-content">
+                              <span className="detail-label">Best Before</span>
+                              <span className="detail-value">{formatDate(donation.bestBefore)}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="assignment-detail-item">
+                            <span className="detail-icon">📍</span>
+                            <div className="detail-content">
+                              <span className="detail-label">Location</span>
+                              <span className="detail-value">{donation.location.latitude.toFixed(4)}, {donation.location.longitude.toFixed(4)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {donation.photoUrl && (
+                          <div className="assignment-photo-section">
+                            <img src={donation.photoUrl} alt="Food" className="assignment-photo" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="assignment-card-actions">
+                        {donation.status === "Assigned" && (
+                          <button 
+                            onClick={() => handlePickupComplete(donation._id)}
+                            className="dashboard-button primary"
+                          >
+                            <span className="button-icon">📦</span>
+                            Confirm Pickup
+                          </button>
+                        )}
                         {donation.status === "PickedUp" && renderDeliveryForm(donation)}
                       </div>
                     </div>
@@ -448,64 +723,60 @@ const VolunteerDashboard = () => {
 
           {activeTab === "completed" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Completed Deliveries</h2>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-green-600">
+              <div className="section-header">
+                <h2 className="section-title">Completed Deliveries</h2>
+                <div className="impact-summary">
+                  <p className="impact-text">
                     Total Impact: {completedDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0)} servings delivered
                   </p>
                 </div>
               </div>
 
               {loadingCompleted ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading completed deliveries...</p>
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading completed deliveries...</p>
                 </div>
               ) : completedDeliveries.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-600">No completed deliveries yet. Start accepting donations to make an impact!</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">🏆</div>
+                  <p className="empty-state-text">No completed deliveries yet. Start accepting donations to make an impact!</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="donation-grid">
                   {completedDeliveries.map((donation) => (
-                    <div key={donation._id} className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <div key={donation._id} className="donation-card">
+                      <div className="donation-card-header">
+                        <h3 className="donation-card-title">{donation.foodType}</h3>
+                        <span className="donation-card-status status-delivered">✅ Delivered</span>
+                      </div>
                       {donation.photoUrl && (
                         <img
                           src={donation.photoUrl}
                           alt="Food"
-                          className="w-full h-32 object-cover rounded-lg mb-4"
+                          className="donation-card-image"
                         />
                       )}
                       
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            ✅ Delivered
-                          </span>
+                      <div className="donation-card-content">
+                        <div className="donation-card-detail">
+                          <strong>Quantity:</strong> {donation.quantity} servings
+                        </div>
+                        <div className="donation-card-detail">
+                          <strong>Donor:</strong> {donation.donor?.name || "Anonymous"}
+                        </div>
+                        <div className="donation-card-detail">
+                          <strong>Completed:</strong> {formatDate(donation.deliveryDetails?.deliveredAt || donation.updatedAt)}
                         </div>
                         
-                        <p className="text-gray-600">
-                          <strong>Quantity:</strong> {donation.quantity} servings
-                        </p>
-                        
-                        <p className="text-gray-600">
-                          <strong>Donor:</strong> {donation.donor?.name || "Anonymous"}
-                        </p>
-                        
-                        <p className="text-gray-500 text-sm">
-                          Completed: {formatDate(donation.deliveryDetails?.deliveredAt || donation.updatedAt)}
-                        </p>
-                        
                         {donation.deliveryDetails && (
-                          <div className="mt-3 p-2 bg-white rounded border">
-                            <p className="text-sm text-gray-600">
+                          <div className="delivery-details">
+                            <div className="donation-card-detail">
                               <strong>Delivered to:</strong> {donation.deliveryDetails.recipientName}
-                            </p>
-                            <p className="text-sm text-gray-600">
+                            </div>
+                            <div className="donation-card-detail">
                               <strong>People served:</strong> {donation.deliveryDetails.numberOfPeopleServed}
-                            </p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -516,51 +787,239 @@ const VolunteerDashboard = () => {
             </div>
           )}
 
-          {activeTab === "stats" && <VolunteerStats userId={user.id} showDetailed={true} />}
-          {activeTab === "leaderboard" && <Leaderboard type="monthly" limit={20} />}
+          {activeTab === "stats" && (
+            <div>
+              <h2 className="section-title mb-6">Your Impact Statistics</h2>
+              
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon">📦</div>
+                  <div className="stat-content">
+                    <div className="stat-value">{completedDeliveries.length}</div>
+                    <div className="stat-label">Total Deliveries</div>
+                  </div>
+                </div>
+                
+                <div className="stat-card">
+                  <div className="stat-icon">🍽️</div>
+                  <div className="stat-content">
+                    <div className="stat-value">{completedDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0)}</div>
+                    <div className="stat-label">Servings Delivered</div>
+                  </div>
+                </div>
+                
+                <div className="stat-card">
+                  <div className="stat-icon">👥</div>
+                  <div className="stat-content">
+                    <div className="stat-value">
+                      {completedDeliveries.reduce((sum, d) => sum + (d.deliveryDetails?.numberOfPeopleServed || 0), 0)}
+                    </div>
+                    <div className="stat-label">People Helped</div>
+                  </div>
+                </div>
+                
+                <div className="stat-card">
+                  <div className="stat-icon">⭐</div>
+                  <div className="stat-content">
+                    <div className="stat-value">
+                      {completedDeliveries.length > 0 
+                        ? (completedDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0) / completedDeliveries.length).toFixed(1)
+                        : '0'
+                      }
+                    </div>
+                    <div className="stat-label">Avg. Servings/Delivery</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="stats-section">
+                <h3 className="stats-subtitle">Monthly Breakdown</h3>
+                <div className="form-card">
+                  <p className="placeholder-text">Monthly statistics chart would be displayed here</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab === "leaderboard" && (
+            <div>
+              <div className="section-header">
+                <h2 className="section-title">Volunteer Leaderboard</h2>
+                <div className="leaderboard-controls">
+                  <select 
+                    value={leaderboardPeriod}
+                    onChange={(e) => {
+                      setLeaderboardPeriod(e.target.value);
+                      fetchLeaderboardData();
+                    }}
+                    className="dashboard-select"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="month">This Month</option>
+                    <option value="week">This Week</option>
+                  </select>
+                </div>
+              </div>
+              
+              {loadingLeaderboard ? (
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading leaderboard...</p>
+                </div>
+              ) : (
+                <div className="leaderboard-container">
+                  {/* Top 3 Winners */}
+                  <div className="leaderboard-winners">
+                    {leaderboardData.slice(0, 3).map((volunteer, index) => (
+                      <div key={volunteer._id} className={`winner-card winner-${index + 1}`}>
+                        <div className="winner-position">
+                          <span className="position-number">{index + 1}</span>
+                          <span className="position-icon">
+                            {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
+                          </span>
+                        </div>
+                        <div className="winner-avatar">
+                          <div className="avatar-placeholder">
+                            {volunteer.name?.charAt(0).toUpperCase() || "V"}
+                          </div>
+                        </div>
+                        <div className="winner-info">
+                          <h3 className="winner-name">{volunteer.name || "Anonymous Volunteer"}</h3>
+                          <p className="winner-stats">
+                            <span className="stat-highlight">{volunteer.totalDeliveries || 0}</span> deliveries • 
+                            <span className="stat-highlight">{volunteer.totalServings || 0}</span> servings
+                          </p>
+                        </div>
+                        <div className="winner-score">
+                          <div className="score-value">{volunteer.score || 0}</div>
+                          <div className="score-label">points</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Rest of the Leaderboard */}
+                  {leaderboardData.length > 3 && (
+                    <div className="leaderboard-list">
+                      <div className="leaderboard-header">
+                        <div className="header-rank">Rank</div>
+                        <div className="header-volunteer">Volunteer</div>
+                        <div className="header-stats">Stats</div>
+                        <div className="header-score">Score</div>
+                      </div>
+                      
+                      {leaderboardData.slice(3).map((volunteer, index) => (
+                        <div key={volunteer._id} className="leaderboard-row">
+                          <div className="rank-cell">
+                            <span className="rank-number">{index + 4}</span>
+                          </div>
+                          <div className="volunteer-cell">
+                            <div className="volunteer-avatar">
+                              <div className="avatar-small">
+                                {volunteer.name?.charAt(0).toUpperCase() || "V"}
+                              </div>
+                            </div>
+                            <div className="volunteer-name">{volunteer.name || "Anonymous Volunteer"}</div>
+                          </div>
+                          <div className="stats-cell">
+                            <div className="stats-grid">
+                              <div className="stat-item">
+                                <span className="stat-value">{volunteer.totalDeliveries || 0}</span>
+                                <span className="stat-label">deliveries</span>
+                              </div>
+                              <div className="stat-item">
+                                <span className="stat-value">{volunteer.totalServings || 0}</span>
+                                <span className="stat-label">servings</span>
+                              </div>
+                              <div className="stat-item">
+                                <span className="stat-value">{volunteer.peopleHelped || 0}</span>
+                                <span className="stat-label">helped</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="score-cell">
+                            <div className="score-badge">{volunteer.score || 0}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* User's Position */}
+                  {userPosition && userPosition.rank > 10 && (
+                    <div className="user-position-card">
+                      <div className="user-position-header">
+                        <span className="user-position-badge">Your Position</span>
+                      </div>
+                      <div className="user-position-content">
+                        <div className="user-rank">#{userPosition.rank}</div>
+                        <div className="user-stats">
+                          <div className="user-name">You</div>
+                          <div className="user-stats-grid">
+                            <span>{userPosition.totalDeliveries} deliveries</span>
+                            <span>•</span>
+                            <span>{userPosition.totalServings} servings</span>
+                            <span>•</span>
+                            <span>{userPosition.score} points</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {leaderboardData.length === 0 && (
+                    <div className="empty-leaderboard">
+                      <div className="empty-leaderboard-icon">🏆</div>
+                      <h3 className="empty-leaderboard-title">No leaderboard data yet</h3>
+                      <p className="empty-leaderboard-text">Complete deliveries to appear on the leaderboard!</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Pickup Photo Modal */}
       {showPickupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Confirm Pickup</h3>
-            <p className="text-gray-600 mb-4">Please take a photo to confirm the pickup:</p>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 className="modal-title">Confirm Pickup</h3>
+            <p className="modal-description">Please take a photo to confirm the pickup:</p>
             
             <input
               type="file"
               accept="image/*"
               capture="camera"
               onChange={(e) => setPickupPhoto(e.target.files[0])}
-              className="w-full mb-4 p-2 border rounded"
+              className="form-input"
             />
             
             {pickupPhoto && (
-              <div className="mb-4">
+              <div className="modal-preview">
                 <img
                   src={URL.createObjectURL(pickupPhoto)}
                   alt="Pickup preview"
-                  className="w-full h-32 object-cover rounded"
+                  className="modal-image"
                 />
               </div>
             )}
             
-            <div className="flex space-x-3">
+            <div className="modal-actions">
               <button
                 onClick={() => {
                   setShowPickupModal(false);
                   setCurrentDonation(null);
                   setPickupPhoto(null);
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="dashboard-button secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmPickupWithPhoto}
                 disabled={!pickupPhoto}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
+                className="dashboard-button primary"
               >
                 Confirm Pickup
               </button>
