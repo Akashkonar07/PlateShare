@@ -9,6 +9,7 @@ import {
   confirmNGODelivery
 } from "../services/donation";
 import UserProfile from "../components/UserProfile";
+import "./NGODashboard.css";
 
 const NGODashboard = () => {
   const { user, logout } = useAuth();
@@ -341,119 +342,126 @@ const NGODashboard = () => {
   const filteredDonations = getFilteredDonations();
 
   return (
-    <div className="max-w-7xl mx-auto mt-20 p-4">
+    <div className="ngo-dashboard">
       {/* Header */}
-      <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">NGO Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {user.name}!</p>
-            <div className="flex items-center mt-2 space-x-6">
-              <div className="flex items-center">
-                <span className="text-blue-500">📦</span>
-                <span className="ml-1 font-medium">{assignedDonations.length} Active Assignments</span>
+      <div className="dashboard-card ngo-header">
+        <div className="header-content">
+          <div className="header-main">
+            <div className="user-avatar">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="user-details">
+              <h1 className="dashboard-title">NGO Dashboard</h1>
+              <p className="welcome-message">Welcome back, {user.name}!</p>
+            </div>
+          </div>
+          
+          <div className="impact-stats">
+            <div className="stat-card">
+              <div className="stat-icon">📦</div>
+              <div className="stat-info">
+                <div className="stat-value">{assignedDonations.length}</div>
+                <div className="stat-label">Active Assignments</div>
               </div>
-              <div className="flex items-center">
-                <span className="text-green-500">✅</span>
-                <span className="ml-1 font-medium">{completedDonations.length} Completed</span>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">✅</div>
+              <div className="stat-info">
+                <div className="stat-value">{completedDonations.length}</div>
+                <div className="stat-label">Completed</div>
               </div>
-              <div className="flex items-center">
-                <span className="text-orange-500">🍽️</span>
-                <span className="ml-1 font-medium">{getTotalServings(completedDonations)} Servings Delivered</span>
+            </div>
+            <div className="stat-card highlight">
+              <div className="stat-icon">🍽️</div>
+              <div className="stat-info">
+                <div className="stat-value">{getTotalServings(completedDonations)}</div>
+                <div className="stat-label">Servings Delivered</div>
               </div>
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            Logout
-          </button>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="bg-white shadow rounded-lg mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab("available")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "available"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Bulk Donations ({filteredDonations.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("assigned")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "assigned"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Active Assignments ({assignedDonations.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("completed")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "completed"
-                  ? "border-green-500 text-green-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Completed ({completedDonations.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("profile")}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "profile"
-                  ? "border-green-500 text-green-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Profile
-            </button>
-          </nav>
+      <div className="dashboard-card">
+        <div className="nav-tabs">
+          <button
+            onClick={() => setActiveTab("available")}
+            className={`nav-tab ${activeTab === "available" ? "active" : ""}`}
+          >
+            Bulk Donations ({filteredDonations.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("assigned")}
+            className={`nav-tab ${activeTab === "assigned" ? "active" : ""}`}
+          >
+            Active Assignments ({assignedDonations.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("completed")}
+            className={`nav-tab ${activeTab === "completed" ? "active" : ""}`}
+          >
+            Completed ({completedDonations.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("profile")}
+            className={`nav-tab ${activeTab === "profile" ? "active" : ""}`}
+          >
+            Profile
+          </button>
         </div>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="tab-content">
           {activeTab === "available" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center space-x-4">
-                  <h2 className="text-2xl font-bold">Bulk Donations Available</h2>
-                  <select
-                    value={filterQuantity}
-                    onChange={(e) => setFilterQuantity(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Sizes</option>
-                    <option value="medium">Medium (10-49 servings)</option>
-                    <option value="large">Large (50+ servings)</option>
-                  </select>
+              <div className="section-header">
+                <div className="section-title-container">
+                  <h2 className="section-title">Bulk Donations Available</h2>
+                  <span className="donation-count">{filteredDonations.length} items</span>
                 </div>
-                <div className="flex space-x-2">
+                <div className="filter-section">
+                  <div className="filter-group">
+                    <label className="filter-label">Filter by size:</label>
+                    <select
+                      value={filterQuantity}
+                      onChange={(e) => setFilterQuantity(e.target.value)}
+                      className="dashboard-input"
+                    >
+                      <option value="all">All Sizes</option>
+                      <option value="medium">Medium (10-49 servings)</option>
+                      <option value="large">Large (50+ servings)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bulk-actions">
+                <div className="selection-info">
                   <button
                     onClick={handleSelectAll}
-                    className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+                    className="dashboard-button"
                   >
                     {selectedDonations.length === filteredDonations.length ? "Deselect All" : "Select All"}
                   </button>
                   {selectedDonations.length > 0 && (
+                    <span className="selected-count">
+                      {selectedDonations.length} selected
+                    </span>
+                  )}
+                </div>
+                <div className="action-buttons">
+                  {selectedDonations.length > 0 && (
                     <button
                       onClick={handleBulkAccept}
-                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+                      className="dashboard-button success"
                     >
                       Accept Selected ({selectedDonations.length})
                     </button>
                   )}
                   <button
                     onClick={fetchAllDonations}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+                    className="dashboard-button primary"
                   >
                     Refresh
                   </button>
@@ -461,72 +469,79 @@ const NGODashboard = () => {
               </div>
 
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading donations...</p>
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p className="loading-text">Loading donations...</p>
                 </div>
               ) : filteredDonations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-600">No bulk donations available at the moment.</p>
-                  <p className="text-gray-500 text-sm mt-2">NGOs handle donations with 10+ servings</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">📦</div>
+                  <p className="empty-state-text">No bulk donations available at the moment.</p>
+                  <p className="empty-state-subtext">NGOs handle donations with 10+ servings</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="donations-grid">
                   {filteredDonations.map((donation) => (
-                    <div key={donation._id} className={`bg-gray-50 rounded-lg p-4 border-2 transition-all ${
-                      selectedDonations.includes(donation._id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                    }`}>
-                      <div className="flex items-start space-x-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedDonations.includes(donation._id)}
-                          onChange={() => handleSelectDonation(donation._id)}
-                          className="mt-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        
-                        {donation.photoUrl && (
-                          <img
-                            src={donation.photoUrl}
-                            alt="Food"
-                            className="w-24 h-24 object-cover rounded-lg flex-shrink-0"
+                    <div key={donation._id} className={`donation-card ${selectedDonations.includes(donation._id) ? 'selected' : ''}`}>
+                      <div className="donation-card-header">
+                        <div className="donation-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selectedDonations.includes(donation._id)}
+                            onChange={() => handleSelectDonation(donation._id)}
+                            className="dashboard-input"
                           />
+                        </div>
+                        <div className="donation-type">
+                          <h3 className="food-title">{donation.foodType}</h3>
+                          <span className={`status-badge ${donation.status.toLowerCase()}`}>
+                            {donation.status}
+                          </span>
+                        </div>
+                        <div className="donation-quantity">
+                          <div className="quantity-number">{donation.quantity}</div>
+                          <div className="quantity-label">servings</div>
+                        </div>
+                      </div>
+                      
+                      <div className="donation-card-body">
+                        {donation.photoUrl && (
+                          <div className="donation-image-container">
+                            <img
+                              src={donation.photoUrl}
+                              alt="Food"
+                              className="donation-image"
+                            />
+                          </div>
                         )}
                         
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                            <p className="text-gray-600">
-                              <strong>{donation.quantity} servings</strong>
-                            </p>
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(donation.status)} mt-1`}>
-                              {donation.status}
-                            </span>
+                        <div className="donation-details">
+                          <div className="detail-row">
+                            <span className="detail-label">Best Before:</span>
+                            <span className="detail-value">{formatDate(donation.bestBefore)}</span>
                           </div>
-                          
-                          <div>
-                            <p className="text-gray-600">
-                              <strong>Best Before:</strong> {formatDate(donation.bestBefore)}
-                            </p>
-                            <p className="text-gray-600">
-                              <strong>Donor:</strong> {donation.donor?.name || "Anonymous"}
-                            </p>
-                            <p className="text-gray-500 text-sm">
-                              Posted: {formatDate(donation.createdAt)}
-                            </p>
+                          <div className="detail-row">
+                            <span className="detail-label">Donor:</span>
+                            <span className="detail-value">{donation.donor?.name || "Anonymous"}</span>
                           </div>
-                          
-                          <div>
-                            {donation.description && (
-                              <p className="text-gray-600 text-sm mb-2">
-                                <strong>Description:</strong> {donation.description}
-                              </p>
-                            )}
-                            {donation.location && (
-                              <p className="text-gray-600 text-sm">
-                                <strong>Location:</strong> {donation.location.latitude.toFixed(4)}, {donation.location.longitude.toFixed(4)}
-                              </p>
-                            )}
+                          <div className="detail-row">
+                            <span className="detail-label">Posted:</span>
+                            <span className="detail-value">{formatDate(donation.createdAt)}</span>
                           </div>
+                          {donation.description && (
+                            <div className="detail-row full-width">
+                              <span className="detail-label">Description:</span>
+                              <span className="detail-value">{donation.description}</span>
+                            </div>
+                          )}
+                          {donation.location && (
+                            <div className="detail-row full-width">
+                              <span className="detail-label">Location:</span>
+                              <span className="detail-value">
+                                {donation.location.latitude.toFixed(4)}, {donation.location.longitude.toFixed(4)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -538,57 +553,52 @@ const NGODashboard = () => {
 
           {activeTab === "assigned" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Active Assignments</h2>
+              <div className="section-header">
+                <h2 className="section-title">Active Assignments</h2>
                 <button
                   onClick={fetchAllDonations}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+                  className="dashboard-button primary"
                 >
                   Refresh
                 </button>
               </div>
 
               {assignedDonations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-600">No active assignments. Check bulk donations to help!</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">📋</div>
+                  <p className="empty-state-text">No active assignments. Check bulk donations to help!</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="assignment-grid">
                   {assignedDonations.map((donation) => (
-                    <div key={donation._id} className="bg-gray-50 rounded-lg p-4 border">
+                    <div key={donation._id} className="assignment-card">
                       {donation.photoUrl && (
                         <img
                           src={donation.photoUrl}
                           alt="Food"
-                          className="w-full h-48 object-cover rounded-lg mb-4"
+                          className="assignment-image"
                         />
                       )}
                       
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(donation.status)}`}>
+                      <div className="assignment-content">
+                        <div className="assignment-header">
+                          <h3 className="assignment-title">{donation.foodType}</h3>
+                          <span className={`status-badge ${donation.status.toLowerCase()}`}>
                             {donation.status}
                           </span>
                         </div>
                         
-                        <p className="text-gray-600">
-                          <strong>Quantity:</strong> {donation.quantity} servings
-                        </p>
-                        
-                        <p className="text-gray-600">
-                          <strong>Best Before:</strong> {formatDate(donation.bestBefore)}
-                        </p>
-                        
-                        <p className="text-gray-600">
-                          <strong>Donor:</strong> {donation.donor?.name || "Anonymous"}
-                        </p>
+                        <div className="assignment-info">
+                          <p><strong>Quantity:</strong> {donation.quantity} servings</p>
+                          <p><strong>Best Before:</strong> {formatDate(donation.bestBefore)}</p>
+                          <p><strong>Donor:</strong> {donation.donor?.name || "Anonymous"}</p>
+                        </div>
 
-                        <div className="flex space-x-2 mt-4">
+                        <div className="assignment-actions">
                           {donation.status === "Assigned" && (
                             <button
                               onClick={() => handleStatusUpdate(donation._id, "PickedUp")}
-                              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                              className="dashboard-button primary"
                             >
                               📦 Confirm Pickup
                             </button>
@@ -597,7 +607,7 @@ const NGODashboard = () => {
                           {donation.status === "PickedUp" && (
                             <button
                               onClick={() => handleStatusUpdate(donation._id, "Delivered")}
-                              className="flex-1 bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                              className="dashboard-button success"
                             >
                               ✅ Confirm Delivery
                             </button>
@@ -613,50 +623,45 @@ const NGODashboard = () => {
 
           {activeTab === "completed" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Completed Deliveries</h2>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-green-600">
+              <div className="section-header">
+                <h2 className="section-title">Completed Deliveries</h2>
+                <div className="impact-summary">
+                  <p className="impact-text">
                     Total Impact: {getTotalServings(completedDonations)} servings delivered
                   </p>
                 </div>
               </div>
 
               {completedDonations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-600">No completed deliveries yet. Start accepting donations to make an impact!</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">🎯</div>
+                  <p className="empty-state-text">No completed deliveries yet. Start accepting donations to make an impact!</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="completed-grid">
                   {completedDonations.map((donation) => (
-                    <div key={donation._id} className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <div key={donation._id} className="completed-card">
                       {donation.photoUrl && (
                         <img
                           src={donation.photoUrl}
                           alt="Food"
-                          className="w-full h-32 object-cover rounded-lg mb-4"
+                          className="completed-image"
                         />
                       )}
                       
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-semibold text-lg">{donation.foodType}</h3>
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <div className="completed-content">
+                        <div className="completed-header">
+                          <h3 className="completed-title">{donation.foodType}</h3>
+                          <span className="status-badge delivered">
                             ✅ Delivered
                           </span>
                         </div>
                         
-                        <p className="text-gray-600">
-                          <strong>Quantity:</strong> {donation.quantity} servings
-                        </p>
-                        
-                        <p className="text-gray-600">
-                          <strong>Donor:</strong> {donation.donor?.name || "Anonymous"}
-                        </p>
-                        
-                        <p className="text-gray-500 text-sm">
-                          Completed: {formatDate(donation.updatedAt || donation.createdAt)}
-                        </p>
+                        <div className="completed-info">
+                          <p><strong>Quantity:</strong> {donation.quantity} servings</p>
+                          <p><strong>Donor:</strong> {donation.donor?.name || "Anonymous"}</p>
+                          <p className="text-sm">Completed: {formatDate(donation.updatedAt || donation.createdAt)}</p>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -675,42 +680,39 @@ const NGODashboard = () => {
       
       {/* Pickup Confirmation Modal */}
       {showPickupModal && currentDonation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Confirm Pickup</h3>
-            <p className="mb-4">Please upload a photo of the pickup location for {currentDonation.foodType}.</p>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Confirm Pickup</h3>
+              <p className="modal-description">Please upload a photo of the pickup location for {currentDonation.foodType}.</p>
+            </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pickup Photo (Required)
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePickupPhotoChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
-              />
+            <div className="modal-form">
+              <div className="form-group">
+                <label className="form-label required">
+                  Pickup Photo (Required)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePickupPhotoChange}
+                  className="file-input"
+                />
+              </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="modal-actions">
               <button
                 onClick={() => setShowPickupModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="dashboard-button"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmPickup}
                 disabled={!pickupPhoto}
-                className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
-                  pickupPhoto ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'
-                }`}
+                className={`dashboard-button success ${!pickupPhoto ? 'disabled' : ''}`}
               >
                 Confirm Pickup
               </button>
@@ -720,35 +722,37 @@ const NGODashboard = () => {
       )}
 
       {showDeliveryModal && currentDonation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Confirm Delivery</h3>
-            <p className="mb-4">Please provide delivery details for {currentDonation.foodType}.</p>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Confirm Delivery</h3>
+              <p className="modal-description">Please provide delivery details for {currentDonation.foodType}.</p>
+            </div>
             
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Recipient Name <span className="text-red-500">*</span>
+            <div className="modal-form">
+              <div className="form-group">
+                <label className="form-label required">
+                  Recipient Name
                 </label>
                 <input
                   type="text"
                   name="recipientName"
                   value={deliveryForm.recipientName}
                   onChange={handleDeliveryFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="form-input"
                   required
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="form-group">
+                <label className="form-label">
                   Recipient Type
                 </label>
                 <select
                   name="recipientType"
                   value={deliveryForm.recipientType}
                   onChange={handleDeliveryFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="form-input"
                 >
                   <option value="Individual">Individual</option>
                   <option value="NGO">NGO</option>
@@ -757,8 +761,8 @@ const NGODashboard = () => {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="form-group">
+                <label className="form-label">
                   Contact Information
                 </label>
                 <input
@@ -766,13 +770,13 @@ const NGODashboard = () => {
                   name="recipientContact"
                   value={deliveryForm.recipientContact}
                   onChange={handleDeliveryFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="form-input"
                   placeholder="Phone number or email"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="form-group">
+                <label className="form-label">
                   Number of People Served
                 </label>
                 <input
@@ -781,12 +785,12 @@ const NGODashboard = () => {
                   min="1"
                   value={deliveryForm.numberOfPeopleServed}
                   onChange={handleDeliveryFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="form-input"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="form-group">
+                <label className="form-label">
                   Notes (Optional)
                 </label>
                 <textarea
@@ -794,49 +798,36 @@ const NGODashboard = () => {
                   value={deliveryForm.notes}
                   onChange={handleDeliveryFormChange}
                   rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="form-input form-textarea"
                   placeholder="Any additional notes about the delivery..."
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Photo <span className="text-red-500">*</span>
+              <div className="form-group">
+                <label className="form-label required">
+                  Delivery Photo (Required)
                 </label>
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
                   onChange={handleDeliveryPhotoChange}
-                  className="block w-full text-sm text-gray-500
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-md file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-blue-50 file:text-blue-700
-                    hover:file:bg-blue-100"
-                  required
+                  className="file-input"
                 />
-                {deliveryPhoto && (
-                  <p className="mt-1 text-sm text-green-600">Photo selected: {deliveryPhoto.name}</p>
-                )}
               </div>
             </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
+            
+            <div className="modal-actions">
               <button
                 onClick={() => setShowDeliveryModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="dashboard-button"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelivery}
                 disabled={!deliveryPhoto || !deliveryForm.recipientName}
-                className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
-                  deliveryPhoto && deliveryForm.recipientName 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-gray-400 cursor-not-allowed'
-                }`}
+                className={`dashboard-button success ${!deliveryPhoto || !deliveryForm.recipientName ? 'disabled' : ''}`}
               >
                 Confirm Delivery
               </button>
