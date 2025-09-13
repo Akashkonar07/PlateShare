@@ -37,6 +37,31 @@
   --dashboard-transition: all 0.2s ease;
 }
 
+/* Enhanced overflow and box-sizing */
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  max-width: 100%; /* Constrain width to parent container */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Enhanced container styling */
+.volunteer-dashboard,
+.dashboard-card,
+.dashboard-content,
+.donation-card,
+.form-card {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 /* Auth Check */
 .auth-check {
   max-width: 48rem;
@@ -48,6 +73,12 @@
   box-shadow: 0 1px 3px var(--dashboard-shadow);
   text-align: center;
   color: var(--dashboard-text-primary);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.auth-check::-webkit-scrollbar {
+  display: none;
 }
 
 /* Dashboard container */

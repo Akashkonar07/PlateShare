@@ -42,12 +42,43 @@
   --dashboard-transition: all 0.2s ease;
 }
 
+/* Enhanced overflow and box-sizing */
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  max-width: 100%; /* Constrain width to parent container */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Enhanced container styling */
+.ngo-dashboard,
+.dashboard-card,
+.dashboard-content,
+.bulk-donation-item,
+.assignment-card {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 /* Dashboard container */
 .ngo-dashboard {
   min-height: 100vh;
   background: var(--dashboard-bg);
   padding: var(--dashboard-spacing-md);
   position: relative;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ngo-dashboard::-webkit-scrollbar {
+  display: none;
 }
 
 /* Card Container - Matching Login Card Style */

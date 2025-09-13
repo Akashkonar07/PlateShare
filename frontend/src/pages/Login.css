@@ -36,6 +36,29 @@
   --login-transition: all 0.2s ease;
 }
 
+/* Enhanced overflow and box-sizing */
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  max-width: 100%; /* Constrain width to parent container */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Enhanced container styling */
+.login-container,
+.login-card,
+.form-group {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 /* Login page container */
 .login-container {
   min-height: 100vh;
@@ -48,6 +71,12 @@
   padding: var(--login-spacing-md);
   position: relative;
   overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.login-container::-webkit-scrollbar {
+  display: none;
 }
 
 /* Minimal background - removed decoration for cleaner look */

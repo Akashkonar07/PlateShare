@@ -36,6 +36,29 @@
   --signup-transition: all 0.2s ease;
 }
 
+/* Enhanced overflow and box-sizing */
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  max-width: 100%; /* Constrain width to parent container */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Enhanced container styling */
+.signup-container,
+.signup-card,
+.form-group {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 /* Signup page container */
 .signup-container {
   min-height: 100vh;
@@ -48,6 +71,12 @@
   padding: var(--signup-spacing-md);
   position: relative;
   overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.signup-container::-webkit-scrollbar {
+  display: none;
 }
 
 /* Signup card - Minimal design matching login */

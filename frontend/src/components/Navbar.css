@@ -54,6 +54,29 @@
   --navbar-item-spacing: 1.5rem;
 }
 
+/* Enhanced overflow and box-sizing */
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  max-width: 100%; /* Constrain width to parent container */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Enhanced navbar container styling */
+.navbar-container,
+.navbar-content,
+.navbar-menu {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
 /* Navbar Container */
 .navbar-container {
   position: sticky;
