@@ -1,8 +1,10 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
 const PhotoCapture = ({ onCapture, onClose }) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [error, setError] = useState(null);
 
   // Cleanup function to stop all media streams
   const stopCamera = () => {
@@ -13,6 +15,7 @@ const PhotoCapture = ({ onCapture, onClose }) => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setIsCameraReady(false);
   };
 
   // Start camera when component mounts
@@ -26,6 +29,7 @@ const PhotoCapture = ({ onCapture, onClose }) => {
 
   const startCamera = async () => {
     try {
+      setError(null);
       stopCamera(); // Stop any existing streams
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
@@ -35,17 +39,24 @@ const PhotoCapture = ({ onCapture, onClose }) => {
         } 
       });
       streamRef.current = stream;
-      videoRef.current.srcObject = stream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setIsCameraReady(true);
+        };
+      }
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("Could not access the camera. Please check permissions and try again.");
+      setError("Could not access the camera. Please check permissions and try again.");
+      setIsCameraReady(false);
     }
   };
 
   const takePhoto = async () => {
     try {
       const video = videoRef.current;
-      if (!video.videoWidth) {
+      if (!video || !video.videoWidth || !video.videoHeight) {
         throw new Error('Camera not ready');
       }
 
@@ -67,7 +78,11 @@ const PhotoCapture = ({ onCapture, onClose }) => {
             type: 'image/jpeg',
             lastModified: Date.now()
           });
+          
+          // Call onCapture with the file - this should NOT submit the form
           onCapture(file);
+          
+          // Stop camera after successful capture
           stopCamera();
         },
         'image/jpeg',
@@ -75,43 +90,104 @@ const PhotoCapture = ({ onCapture, onClose }) => {
       );
     } catch (error) {
       console.error("Error taking photo:", error);
-      alert("Failed to capture image. Please try again.");
+      setError("Failed to capture image. Please try again.");
     }
   };
 
+  const handleRetake = () => {
+    startCamera();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-4 w-full max-w-md">
-        <div className="relative w-full h-96 bg-black rounded-lg overflow-hidden">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline
-            muted
-            className="w-full h-full object-cover"
+    <div className="photo-capture-modal">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h3 className="modal-title">📸 Capture Food Photo</h3>
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="close-btn"
+            aria-label="Close camera"
+          >
+            ×
+          </button>
+        </div>
+        
+        <div className="video-container">
+          {error ? (
+            <div className="error-message" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              color: '#ef4444',
+              textAlign: 'center',
+              padding: '20px'
+            }}>
+              <div>
+                <div style={{fontSize: '48px', marginBottom: '10px'}}>📷</div>
+                <div>{error}</div>
+              </div>
+            </div>
+          ) : (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline
+              muted
+              className="camera-video"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                borderRadius: '8px'
+              }}
+            />
+          )}
+        </div>
+        
+        <div className="camera-controls">
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              takePhoto();
+            }}
+            disabled={!isCameraReady || !!error}
+            className="capture-btn"
+            aria-label="Take photo"
+            title={isCameraReady ? "Take photo" : "Camera not ready"}
           />
         </div>
         
-        <div className="flex justify-center space-x-4 mt-4">
-          <button 
-            onClick={takePhoto}
-            className="w-16 h-16 rounded-full bg-red-500 border-4 border-white shadow-lg"
-            aria-label="Take photo"
-          ></button>
-        </div>
-        
-        <div className="flex justify-between mt-4">
+        <div className="action-buttons">
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="action-btn"
           >
             Cancel
           </button>
           <button
-            onClick={startCamera}
-            className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleRetake();
+            }}
+            disabled={!isCameraReady || !!error}
+            className="action-btn primary"
           >
-            Retake
+            🔄 Retake
           </button>
         </div>
       </div>
