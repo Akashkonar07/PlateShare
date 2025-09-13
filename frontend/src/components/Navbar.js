@@ -12,6 +12,10 @@ const Navbar = () => {
 
   return (
     <nav className="navbar-container">
+      <div className="navbar-background">
+        <div className="navbar-pattern"></div>
+        <div className="navbar-glow"></div>
+      </div>
       <div className="navbar-content">
         <div className="navbar-inner">
           {/* Logo + Brand */}
@@ -21,9 +25,9 @@ const Navbar = () => {
             className="navbar-brand"
           >
             <img 
-              src="/assets/PlateShare.png" 
+              src="/assets/BGR_PlateShare.png" 
               alt="PlateShare Logo" 
-              className="navbar-logo"
+              className="logo"
             />
             <span className="navbar-brand-text">PlateShare</span>
           </Link>
