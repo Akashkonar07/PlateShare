@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { loginUser } from "../services/auth";
 import { useAuth } from "../hooks/useAuth";
+import "./Login.css";
 
 const Login = () => {
   const { login } = useAuth();
@@ -33,16 +34,80 @@ const Login = () => {
 
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-6 bg-white shadow rounded">
-      <h2 className="text-2xl font-bold mb-4">Login</h2>
-      {error && <p className="text-red-500 mb-3">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input type="email" name="email" placeholder="Email" autoComplete="email" value={form.email} onChange={handleChange} required className="w-full p-2 border rounded" />
-        <input type="password" name="password" placeholder="Password" autoComplete="current-password" value={form.password} onChange={handleChange} required className="w-full p-2 border rounded" />
-        <button type="submit" disabled={loading} className={`w-full p-2 rounded text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"}`}>
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+    <div className="login-container">
+      <div className="login-card">
+        {/* Brand Section */}
+        <div className="login-brand">
+          <img 
+            src="/assets/PlateShare.png" 
+            alt="PlateShare Logo" 
+            className="login-logo"
+          />
+          <h1 className="login-title">Welcome Back</h1>
+          <p className="login-subtitle">Sign in to continue to PlateShare</p>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="login-error">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0a8 8 0 1 0 8 8A8 8 0 0 0 8 0zM7 3h2v6H7zm0 8h2v2H7z"/>
+            </svg>
+            {error}
+          </div>
+        )}
+
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="login-form-group">
+            <label htmlFor="email" className="login-label">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              placeholder="Enter your email"
+              autoComplete="email"
+              value={form.email}
+              onChange={handleChange}
+              required
+              className="login-input"
+            />
+          </div>
+
+          <div className="login-form-group">
+            <label htmlFor="password" className="login-label">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              value={form.password}
+              onChange={handleChange}
+              required
+              className="login-input"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`login-submit ${loading ? 'loading' : ''}`}
+          >
+            {loading ? 'Logging in...' : 'Log In'}
+          </button>
+        </form>
+
+        {/* Links Section */}
+        <div className="login-links">
+          <p>
+            Don't have an account?{' '}
+            <Link to="/signup" className="login-link">
+              Sign up here
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
